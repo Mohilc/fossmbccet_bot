@@ -71,7 +71,7 @@ async def serve_dashboard():
         "health": "/health"
     })
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():
     """Lightweight health check for cloud uptime monitoring (Render, Railway, UptimeRobot)."""
     return {
