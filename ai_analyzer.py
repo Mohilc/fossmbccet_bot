@@ -4,9 +4,12 @@ import json
 import base64
 import urllib.request
 import urllib.error
-from typing import Dict, Any, Optional, List, Tuple
 from pathlib import Path
-import httpx
+from typing import Dict, Any, Optional, List, Tuple
+try:
+    import httpx
+except ImportError:
+    httpx = None
 
 from config import (
     GEMINI_API_KEY,
@@ -52,9 +55,18 @@ class AIAnalyzer:
             (NVIDIA_VISION_MODEL, NVIDIA_VISION_KEY),
         ]
 
-        # Text Reasoning Models Pool (Ordered by priority & speed)
+        # Multi-Engine Reasoning Pool (Ordered by verified speed & precision)
+        # 1. DiffusionGemma 26b: Ultra-fast (1.0-3.0s), high-quality code in all languages + valid JSON
+        # 2. Poolside Laguna XS: Developer code & syntax specialist
+        # 3. NVIDIA Nemotron 3.5: Deep Hacker reasoning & logic
+        # 4. Meta Muse Glimmer 30b: FOSS reasoning
+        # 5. Moonshot Kimi-k3: Deep Reasoning
         self.text_models: List[Tuple[str, str]] = [
-            (NVIDIA_NEMOTRON_MODEL, NVIDIA_NEMOTRON_KEY)
+            (NVIDIA_VISION_MODEL, NVIDIA_VISION_KEY),      # Google DiffusionGemma 26b
+            (NVIDIA_LAGUNA_MODEL, NVIDIA_LAGUNA_KEY),      # Poolside Laguna XS
+            (NVIDIA_NEMOTRON_MODEL, NVIDIA_NEMOTRON_KEY),  # NVIDIA Nemotron 3.5
+            (NVIDIA_MUSE_MODEL, NVIDIA_MUSE_KEY),          # Meta Muse Glimmer
+            (NVIDIA_KIMI_MODEL, NVIDIA_KIMI_KEY)           # Moonshot Kimi-k3
         ]
 
     @staticmethod
@@ -124,66 +136,128 @@ class AIAnalyzer:
         }
 
     def _clean_json_response(self, text: str) -> Dict[str, Any]:
-        """Safely parses JSON even when surrounded by reasoning tokens or thoughts."""
+        """Safely parses JSON or direct markdown/code from all AI models."""
         text = text.strip()
 
         def _validate_and_normalize(parsed: Any) -> Optional[Dict[str, Any]]:
             if isinstance(parsed, dict) and ("category" in parsed or "direct_answer" in parsed):
                 if "category" not in parsed:
-                    parsed["category"] = "General FOSS & Community"
+                    parsed["category"] = "FOSS Mentor"
                 if "subcategory" not in parsed:
-                    parsed["subcategory"] = "General"
+                    parsed["subcategory"] = "Solution"
                 if "difficulty" not in parsed:
                     parsed["difficulty"] = "Beginner"
                 if "tags" not in parsed or not isinstance(parsed["tags"], list):
-                    parsed["tags"] = ["foss", "mbccet"]
+                    parsed["tags"] = ["foss", "solution"]
                 if "direct_answer" not in parsed:
                     parsed["direct_answer"] = parsed.get("summary", "")
                 return parsed
             return None
 
+        def _try_repair_and_parse(candidate: str) -> Optional[Dict[str, Any]]:
+            candidate = candidate.strip()
+            # 1. Direct parse
+            try:
+                p = json.loads(candidate)
+                v = _validate_and_normalize(p)
+                if v:
+                    return v
+            except Exception:
+                pass
+
+            # 2. Syntax repairs (trailing commas, unclosed brackets)
+            fixed = re.sub(r",\s*([\]\}])", r"\1", candidate)
+            fixed = re.sub(r'(\[[^\]\n]*?),\s*\n\s*("[a-zA-Z_]+":)', r'\1], \2', fixed)
+            try:
+                p = json.loads(fixed)
+                v = _validate_and_normalize(p)
+                if v:
+                    return v
+            except Exception:
+                pass
+
+            # 3. Regex extraction of fields if candidate looks like JSON
+            if '"direct_answer"' in candidate or '"category"' in candidate:
+                def _get_field(name: str) -> Optional[str]:
+                    m = re.search(r'"' + name + r'"\s*:\s*"((?:[^"\\]|\\.)*)"', candidate)
+                    if m:
+                        raw_val = m.group(1)
+                        try:
+                            return json.loads('"' + raw_val + '"')
+                        except Exception:
+                            return raw_val.replace('\\n', '\n').replace('\\"', '"')
+                    return None
+
+                ans = _get_field("direct_answer")
+                if ans:
+                    return {
+                        "category": _get_field("category") or "FOSS Mentor",
+                        "subcategory": _get_field("subcategory") or "Solution",
+                        "difficulty": "Beginner",
+                        "tags": ["foss", "solution"],
+                        "summary": _get_field("summary") or "",
+                        "direct_answer": ans,
+                        "terminal_commands_or_code": _get_field("terminal_commands_or_code") or "",
+                        "recommended_foss_tools": [],
+                        "foss_tip": _get_field("foss_tip") or ""
+                    }
+
+            return None
+
         # 1. Look for ```json ... ``` blocks
         matches = re.findall(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
         for m in reversed(matches):
-            try:
-                candidate = m.strip()
-                parsed = json.loads(candidate)
-                valid = _validate_and_normalize(parsed)
-                if valid:
-                    return valid
-            except Exception:
-                pass
+            res = _try_repair_and_parse(m)
+            if res:
+                return res
 
         # 2. Look for outermost JSON brackets { ... }
         curly_matches = re.findall(r"(\{[\s\S]*\})", text)
         for c in reversed(curly_matches):
-            try:
-                parsed = json.loads(c)
-                valid = _validate_and_normalize(parsed)
-                if valid:
-                    return valid
-            except Exception:
-                pass
+            res = _try_repair_and_parse(c)
+            if res:
+                return res
 
         # 3. Direct parse
-        try:
-            parsed = json.loads(text)
-            valid = _validate_and_normalize(parsed)
-            if valid:
-                return valid
-        except Exception:
-            pass
+        res = _try_repair_and_parse(text)
+        if res:
+            return res
 
-        raise ValueError(f"Could not parse valid JSON from output: {text[:250]}...")
+        # 4. Smart Markdown / Direct Text & Code extraction (for models that output Markdown)
+        if len(text.strip()) > 10:
+            clean_text = text.strip()
+            # Extract code blocks
+            code_blocks = re.findall(r"```(?:\w+)?\s*([\s\S]*?)```", clean_text)
+            text_without_code = re.sub(r"```(?:\w+)?\s*[\s\S]*?```", "", clean_text).strip()
+
+            # Clean thought traces if present
+            text_without_code = re.sub(r"(?i)here's a thinking process:[\s\S]*?\n\n", "", text_without_code).strip()
+            text_without_code = re.sub(r"<think>[\s\S]*?</think>", "", text_without_code).strip()
+
+            code = "\n\n".join(cb.strip() for cb in code_blocks) if code_blocks else ""
+
+            return {
+                "category": "FOSS Mentor",
+                "subcategory": "Solution",
+                "difficulty": "Beginner",
+                "tags": ["foss", "solution"],
+                "summary": "Technical solution",
+                "direct_answer": text_without_code or clean_text,
+                "terminal_commands_or_code": code,
+                "recommended_foss_tools": [],
+                "foss_tip": "Run the code or commands above to resolve your doubt!"
+            }
+
+        raise ValueError(f"Could not parse valid answer from output: {text[:250]}...")
 
     def _call_nvidia_nim_model(
         self,
         model: str,
         api_key: str,
         messages: List[Dict[str, Any]],
-        max_tokens: int = 1200,
+        max_tokens: int = 600,
         temperature: float = 0.2,
-        timeout: float = 3.0
+        timeout: float = 6.0
     ) -> str:
         """Calls a specific model on NVIDIA NIM with streaming/polling support."""
         if not api_key:
@@ -202,27 +276,36 @@ class AIAnalyzer:
             "stream": False
         }
 
-        with httpx.Client(timeout=timeout) as client:
-            res = client.post(invoke_url, headers=headers, json=payload)
-            if res.status_code != 200:
-                raise RuntimeError(f"NIM Error {res.status_code}: {res.text}")
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(invoke_url, data=data_bytes, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as err:
+            err_body = err.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"NIM Error {err.code}: {err_body}")
 
-            data = res.json()
-            choices = data.get("choices", [])
-            if not choices:
-                raise ValueError("No choices in NIM response")
+        choices = data.get("choices") or []
+        if not choices:
+            raise ValueError("No choices in NIM response")
 
-            msg = choices[0].get("message", {})
-            # Some models put thoughts in reasoning_content and answer in content
-            content = msg.get("content") or ""
-            reasoning = msg.get("reasoning_content") or ""
+        msg = choices[0].get("message") or {}
+        content = msg.get("content") or ""
+        reasoning = msg.get("reasoning_content") or ""
 
-            # If content contains the JSON, use it; otherwise check reasoning
-            if content and "{" in content:
-                return content
-            elif reasoning and "{" in reasoning:
-                return reasoning
-            return content or reasoning
+        # If content contains the JSON, use it; otherwise check reasoning
+        if content and "{" in content:
+            target = content
+        elif reasoning and "{" in reasoning:
+            target = reasoning
+        else:
+            target = content or reasoning
+
+        # Strip thinking trace if present (e.g. Nemotron/DeepSeek thoughts)
+        target = re.sub(r"(?i)^here's a thinking process:[\s\S]*?(?=\{\s*\"category\"|\Z)", "", target).strip()
+        target = re.sub(r"<think>[\s\S]*?</think>", "", target).strip()
+
+        return target
 
     def _call_gemini_rest(self, contents: list, system_instruction: str = "") -> str:
         """Calls Google Gemini REST API."""
@@ -266,7 +349,139 @@ class AIAnalyzer:
         q = (query + " " + caption).lower()
         is_detail = any(w in q for w in ["more detail", "more info", "in detail", "explain more", "detailed", "step by step", "deep dive", "elaborate"])
 
-        if any(w in q for w in ["git", "branch", "merge", "rebase", "commit", "push", "pull", "stash", "checkout", "conflict", "head", "origin"]):
+        if any(w in q for w in ["linked list", "linkedlist", "binary search", "sort", "tree", "queue", "stack", "recursion", "dsa"]):
+            category = "Data Structures & Algorithms"
+            subcategory = "Algorithm Implementation"
+            difficulty = "Intermediate"
+            tags = ["dsa", "algorithms", "python", "code"]
+            summary = "Data structures and algorithm doubt"
+            direct_answer = (
+                "To reverse a singly linked list iteratively, track three pointers:\n"
+                "• <code>prev</code> initialized to <code>None</code>\n"
+                "• <code>curr</code> initialized to <code>head</code>\n"
+                "In each step: save <code>nxt = curr.next</code>, point <code>curr.next = prev</code>, shift <code>prev = curr</code>, and advance <code>curr = nxt</code>."
+            )
+            code = (
+                "class ListNode:\n"
+                "    def __init__(self, val=0, next=None):\n"
+                "        self.val = val\n"
+                "        self.next = next\n\n"
+                "def reverse_list(head: ListNode) -> ListNode:\n"
+                "    prev = None\n"
+                "    curr = head\n"
+                "    while curr:\n"
+                "        nxt = curr.next\n"
+                "        curr.next = prev\n"
+                "        prev = curr\n"
+                "        curr = nxt\n"
+                "    return prev"
+            )
+            tools = ["Python 3", "PyPy", "Visualgo"]
+            tip = "Iterative reversal runs in O(n) time and O(1) extra space!"
+
+        elif any(w in q for w in ["python", "pip", "virtualenv", "venv", "fastapi", "flask", "django", "pandas", "numpy", "def ", "list comprehension"]):
+            category = "Python Programming"
+            subcategory = "Python Development"
+            difficulty = "Beginner" if any(w in q for w in ["install", "print", "loop", "reverse", "function"]) else "Intermediate"
+            tags = ["python", "programming", "code"]
+            summary = "Python programming inquiry"
+            direct_answer = (
+                "Python best practices and idioms:\n"
+                "• Reverse strings/lists with slicing: <code>items[::-1]</code>\n"
+                "• Transform data cleanly with list comprehensions: <code>[x * 2 for x in items]</code>\n"
+                "• Always isolate project dependencies in virtual environments."
+            )
+            code = (
+                "# Python sequence reversal\n"
+                "text = 'hello foss'\n"
+                "reversed_text = text[::-1]\n"
+                "print(reversed_text)  # 'ssof olleh'\n\n"
+                "# Virtual environment setup\n"
+                "# python -m venv .venv && source .venv/bin/activate"
+            )
+            tools = ["Python 3", "IPython", "Ruff", "Black"]
+            tip = "Use `enumerate(items)` instead of `range(len(items))` when you need both index and value!"
+
+        elif any(w in q for w in [" c ", "c++", "cpp", "pointer", "segfault", "segmentation fault", "malloc", "free(", "valgrind", "struct", "gcc", "clang"]):
+            category = "C & C++ Programming"
+            subcategory = "Memory & Pointers"
+            difficulty = "Intermediate"
+            tags = ["c", "cpp", "pointers", "memory"]
+            summary = "C/C++ memory management and pointer debugging"
+            direct_answer = (
+                "Segmentation faults happen when accessing invalid memory:\n"
+                "1. <b>NULL Pointer:</b> Always check <code>if (ptr != NULL)</code> before dereferencing.\n"
+                "2. <b>Buffer Overflow:</b> Keep array indexing strictly within <code>[0, size-1]</code>.\n"
+                "3. <b>Dangling Pointer:</b> Set <code>ptr = NULL;</code> immediately after <code>free(ptr);</code>."
+            )
+            code = (
+                "#include <stdio.h>\n"
+                "#include <stdlib.h>\n\n"
+                "int main(void) {\n"
+                "    int *arr = malloc(5 * sizeof(int));\n"
+                "    if (!arr) return 1; // Always check allocation\n\n"
+                "    for (int i = 0; i < 5; i++) arr[i] = i * 10;\n"
+                "    printf(\"First: %d\\n\", arr[0]);\n\n"
+                "    free(arr);\n"
+                "    arr = NULL; // Prevent dangling pointer\n"
+                "    return 0;\n"
+                "}"
+            )
+            tools = ["GCC", "Clang", "Valgrind", "GDB"]
+            tip = "Compile with `-Wall -Wextra -g` and run under `valgrind ./program` to spot memory leaks instantly!"
+
+        elif any(w in q for w in ["javascript", "js", "typescript", "ts", "react", "node", "npm", "async", "await", "promise", "html", "css"]):
+            category = "Web & JavaScript"
+            subcategory = "Frontend & Node.js"
+            difficulty = "Beginner" if any(w in q for w in ["html", "css", "basic"]) else "Intermediate"
+            tags = ["javascript", "web", "frontend"]
+            summary = "JavaScript and web development doubt"
+            direct_answer = (
+                "Modern JavaScript (ES6+) async patterns:\n"
+                "• Use <code>async/await</code> with <code>try...catch</code> for clean asynchronous handling.\n"
+                "• Prefer <code>const</code> and <code>let</code> over <code>var</code> for block scoping.\n"
+                "• Use <code>.map()</code> and <code>.filter()</code> for functional array transformations."
+            )
+            code = (
+                "// Clean asynchronous fetch in JavaScript\n"
+                "async function fetchFossData(url) {\n"
+                "    try {\n"
+                "        const response = await fetch(url);\n"
+                "        if (!response.ok) throw new Error(`HTTP ${response.status}`);\n"
+                "        const data = await response.json();\n"
+                "        return data;\n"
+                "    } catch (err) {\n"
+                "        console.error('Fetch failed:', err);\n"
+                "    }\n"
+                "}"
+            )
+            tools = ["Node.js", "Vite", "ESLint", "Prettier"]
+            tip = "Use `console.table()` instead of `console.log()` to inspect objects and arrays cleanly in devtools!"
+
+        elif any(w in q for w in ["disk", "space", "storage", "memory", "ram", "cpu", "df", "du", "free", "htop"]):
+            category = "Linux System Administration"
+            subcategory = "Disk & Resource Monitoring"
+            difficulty = "Beginner"
+            tags = ["linux", "sysadmin", "disk-space"]
+            summary = "Linux disk space and resource check"
+            direct_answer = (
+                "Commands to check system storage and memory:\n"
+                "• <b>Disk space:</b> <code>df -h</code> displays disk usage per mount in GB/MB.\n"
+                "• <b>Directory sizes:</b> <code>du -sh * | sort -rh | head -n 5</code> lists the 5 largest items.\n"
+                "• <b>RAM usage:</b> <code>free -h</code> displays used and available system memory."
+            )
+            code = (
+                "# Check disk partition usage in GB/MB\n"
+                "df -h\n\n"
+                "# Find top 5 largest directories in current path\n"
+                "du -sh * 2>/dev/null | sort -rh | head -n 5\n\n"
+                "# Check RAM status\n"
+                "free -h"
+            )
+            tools = ["df", "du", "btop", "ncdu"]
+            tip = "Install `ncdu` (`sudo apt install ncdu`) for a fast interactive terminal disk analyzer!"
+
+        elif any(w in q for w in ["git", "branch", "merge", "rebase", "commit", "push", "pull", "stash", "checkout", "conflict", "head", "origin"]):
             category = "Git & Version Control"
             subcategory = "Branching & Workflow"
             difficulty = "Beginner" if any(w in q for w in ["clone", "init", "add", "commit", "push"]) else "Intermediate"
@@ -397,6 +612,31 @@ class AIAnalyzer:
             tools = ["LibreOffice", "GIMP", "Inkscape", "VSCodium"]
             tip = "Filter by 'Open Source' on AlternativeTo.net to find community alternatives!"
 
+        elif any(w in q for w in ["code", "loop", "function", "array", "string", "variable", "syntax", "algorithm", "sort", "search", "class", "object", "return", "hashmap", "dictionary"]):
+            category = "Programming & Problem Solving"
+            subcategory = "Code Logic"
+            difficulty = "Beginner"
+            tags = ["programming", "code", "logic"]
+            summary = "Programming logic and problem solving"
+            direct_answer = (
+                "Key problem-solving patterns in software engineering:\n"
+                "1. Break problems down into input parsing, data transformation, and output formatting.\n"
+                "2. Choose efficient data structures (hash maps for O(1) lookups, lists for sequential traversal).\n"
+                "3. Handle edge cases (empty inputs, boundaries, type mismatches) early with guard clauses."
+            )
+            code = (
+                "# Clean modular function pattern\n"
+                "def process_items(items):\n"
+                "    if not items:\n"
+                "        return []\n"
+                "    return [item.strip().lower() for item in items if item]\n\n"
+                "# Test execution\n"
+                "print(process_items([' FOSS ', 'MBCCET', '']))\n"
+                "# Output: ['foss', 'mbccet']"
+            )
+            tools = ["Python 3", "GCC", "VS Code", "GDB"]
+            tip = "Write small, testable pure functions that do one thing well!"
+
         else:
             category = "FOSS Community"
             subcategory = "Q&A"
@@ -405,12 +645,14 @@ class AIAnalyzer:
             summary = f"Query: {query[:50]}"
             direct_answer = (
                 f"Regarding your query on '{query}':\n\n"
-                "FOSS MBCCET is here to help! Ask specific questions about Linux commands, "
-                "Git workflows, compiler errors, or open-source licenses for an instant step-by-step fix."
+                "Tuxie is here to help! Share your:\n"
+                "• Programming language (Python, C, JS, Rust) or OS (Linux/Ubuntu)\n"
+                "• The specific error message, stack trace, or desired output\n"
+                "• The code snippet you are currently working on"
             )
-            code = "# Quick starter check\ngit --version\nwhoami"
-            tools = ["Git", "Linux", "GitHub"]
-            tip = "Include your OS and error message for the most precise solution!"
+            code = ""
+            tools = ["Git", "Linux", "Python", "GCC"]
+            tip = "Share the exact error log or screenshot for a line-by-line solution!"
 
         return {
             "category": category,
@@ -441,7 +683,7 @@ class AIAnalyzer:
             {"role": "user", "content": prompt}
         ]
 
-        # 1. Iterate through NVIDIA NIM Text Models (Fast 3s timeout)
+        # 1. Iterate through NVIDIA NIM Models Pool (Gemma -> Laguna -> Nemotron -> Muse -> Kimi)
         for model_name, api_key in self.text_models:
             if not api_key:
                 continue
@@ -450,7 +692,8 @@ class AIAnalyzer:
                     model=model_name,
                     api_key=api_key,
                     messages=messages,
-                    timeout=3.0
+                    max_tokens=600,
+                    timeout=5.5
                 )
                 if raw_text:
                     parsed = self._clean_json_response(raw_text)

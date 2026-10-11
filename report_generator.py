@@ -5,10 +5,39 @@ from typing import Dict, Any, Optional
 
 from config import UPLOADS_DIR
 
+import re
+
+def detect_code_language_and_label(code: str) -> tuple:
+    """Detects programming language and human-friendly badge for code snippets."""
+    if not code:
+        return "", "Solution"
+
+    first_line = code.strip().split("\n")[0].strip().lower()
+
+    if any(k in code for k in ["def ", "import ", "class ", "self.", "print(", "ListNode", "range("]):
+        return "python", "Python Solution"
+    elif any(k in code for k in ["#include", "int main", "printf(", "malloc(", "cout <<", "std::"]):
+        return "c", "C/C++ Solution"
+    elif any(k in code for k in ["const ", "let ", "var ", "console.log", "function ", "=> {"]):
+        return "javascript", "JavaScript Solution"
+    elif any(k in code for k in ["public static void main", "System.out.println"]):
+        return "java", "Java Solution"
+    elif any(k in code for k in ["fn main()", "println!"]):
+        return "rust", "Rust Solution"
+    elif any(k in code for k in ["FROM ", "RUN ", "ENTRYPOINT ", "CMD [", "docker-compose"]):
+        return "dockerfile", "Docker / Config"
+    elif any(first_line.startswith(c) for c in [
+        "git", "sudo", "apt", "chmod", "systemctl", "docker", "curl", "whoami",
+        "uname", "#", "df", "du", "free", "ls", "cd", "mkdir", "cat", "echo", "ssh", "grep"
+    ]):
+        return "bash", "Terminal Commands"
+    else:
+        return "", "Solution / Code"
+
 def format_telegram_response(analysis: Dict[str, Any], query_id: Optional[int] = None) -> str:
     """
     Formats the AI analysis into clean, precise, and readable HTML for Telegram.
-    Simple, elegant structure: direct answer + commands + pro-tip.
+    Supports all programming languages, shell commands, and configs.
     """
     category = html.escape(str(analysis.get("category", "FOSS Mentor")), quote=False)
     subcategory = html.escape(str(analysis.get("subcategory", "")), quote=False)
@@ -16,16 +45,24 @@ def format_telegram_response(analysis: Dict[str, Any], query_id: Optional[int] =
     code = str(analysis.get("terminal_commands_or_code", "")).strip()
     tip = html.escape(str(analysis.get("foss_tip", "")), quote=False).strip()
 
-    cat_badge = f"{category} • {subcategory}" if subcategory and subcategory not in ["General", "Welcome", ""] else category
+    cat_badge = f"{category} • {subcategory}" if subcategory and subcategory not in ["General", "Welcome", "Solution", ""] else category
 
     parts = [f"🐧 <b>FOSS MBCCET</b> | <i>{cat_badge}</i>\n"]
 
     if direct_answer:
+        # If direct_answer already contains supported HTML tags, keep them; otherwise escape safely
+        if not re.search(r"<(?:b|i|code|pre|a|strong|em)\b", direct_answer):
+            direct_answer = html.escape(direct_answer, quote=False)
         parts.append(direct_answer)
 
     if code:
-        escaped_code = html.escape(code, quote=False)
-        parts.append(f"\n💻 <b>Commands:</b>\n<pre><code>{escaped_code}</code></pre>")
+        # Clean markdown code fences if model returned them
+        clean_code = re.sub(r"^```(?:\w+)?\n?", "", code).strip()
+        clean_code = re.sub(r"\n?```$", "", clean_code).strip()
+        lang, code_label = detect_code_language_and_label(clean_code)
+        escaped_code = html.escape(clean_code, quote=False)
+        lang_attr = f' class="language-{lang}"' if lang else ""
+        parts.append(f"\n💻 <b>{code_label}:</b>\n<pre><code{lang_attr}>{escaped_code}</code></pre>")
 
     if tip:
         parts.append(f"\n💡 <i>Tip: {tip}</i>")

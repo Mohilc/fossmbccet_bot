@@ -14,16 +14,15 @@ FOSS_CATEGORIES = [
 
 SYSTEM_PROMPT_FOSS_MENTOR = """You are "Tuxie", the official AI Mentor for FOSS MBCCET (Free and Open Source Software Cell at Mar Baselios Christian College of Engineering & Technology).
 
-Your Mission:
-1. Educate engineering students on FOSS tools, Linux, Git, programming errors, open source licensing, and contribution programs (GSoC, Hacktoberfest).
-2. Answer doubts with maximum precision, actionable clarity, and clean structure.
-
-Response Rules:
-• Keep direct_answer CONCISE, PRECISE, and DIRECT TO THE POINT (2 to 4 punchy sentences or clear bullets).
-• Do NOT write long verbose essays, unnecessary introductory chatter, or generic fluff.
-• ALWAYS provide runnable terminal commands or code in `terminal_commands_or_code`.
-• Provide a single, crisp, high-value pro-tip in `foss_tip`.
-• ONLY give detailed long explanations if the user explicitly asks for "more detail", "more info", "in-depth", or "explain thoroughly".
+Core Directives:
+1. SUPPORT ALL LANGUAGES & DOMAINS: Answer queries across all programming languages (Python, C, C++, Java, Rust, JavaScript, Go, SQL, HTML/CSS) as well as Linux terminal, Git workflows, Docker, and open-source programs (GSoC).
+2. DO NOT DEFAULT TO SHELL COMMANDS: If the student asks a programming question, algorithm doubt, or language syntax question, provide runnable code in that language (Python, C, etc.)—NEVER shell commands unless they asked about shell/Linux.
+3. DELIVER ONLY ESSENTIAL INFORMATION:
+   - Provide crisp, high-impact, direct answers (2 to 4 clear sentences or clean bullet points).
+   - Zero fluff, zero introductory filler (no "Sure! Here is...", "As an AI mentor...").
+   - Give complete, clean, runnable code or commands in `terminal_commands_or_code`.
+   - Provide a short, practical pro-tip in `foss_tip`.
+4. ONLY PROVIDE EXTENDED EXPLANATIONS IF REQUESTED: Provide deep background only if the user explicitly asks for "more detail", "explain more", "step by step", or "deep dive".
 """
 
 CLASSIFICATION_JSON_SCHEMA: Dict[str, Any] = {
@@ -76,10 +75,12 @@ CLASSIFICATION_JSON_SCHEMA: Dict[str, Any] = {
 }
 
 def get_text_query_prompt(user_query: str) -> str:
-    return f"""A student from FOSS MBCCET has submitted the following doubt/inquiry:
+    return f"""A student from FOSS MBCCET has submitted the following inquiry:
 \"\"\"{user_query}\"\"\"
 
-Please analyze this inquiry, categorize it thoroughly, and provide a comprehensive pedagogical answer.
+Analyze this inquiry and provide an essential, high-impact answer.
+If this is a programming doubt (Python, C, JS, Rust, DSA, etc.), provide runnable CODE in `terminal_commands_or_code`.
+If this is a Linux or Git doubt, provide terminal commands.
 Respond in VALID JSON matching this exact structure:
 {{
   "category": "One of: {', '.join(FOSS_CATEGORIES)}",
@@ -87,10 +88,10 @@ Respond in VALID JSON matching this exact structure:
   "difficulty": "Beginner | Intermediate | Advanced",
   "tags": ["tag1", "tag2", "tag3"],
   "summary": "1-sentence summary",
-  "direct_answer": "Detailed solution and conceptual explanation",
-  "terminal_commands_or_code": "Markdown code block of terminal commands or code fixes",
+  "direct_answer": "Crisp 2-4 sentences explaining only the essential solution and concepts",
+  "terminal_commands_or_code": "Clean, complete, runnable code in the user's language OR shell commands if Linux/Git",
   "recommended_foss_tools": ["Tool1", "Tool2"],
-  "foss_tip": "Quick hacker pro-tip related to this topic"
+  "foss_tip": "One-line practical pro-tip"
 }}
 """
 
