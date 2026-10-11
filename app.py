@@ -37,13 +37,13 @@ def _telegram_bot_supervisor():
     global _bot_proc
     while True:
         try:
-            print("🚀 [FastAPI] Launching Telegram Bot daemon subprocess...")
+            print("[FastAPI] Launching Telegram Bot daemon subprocess...")
             _bot_proc = subprocess.Popen([sys.executable, "telegram_bot.py"])
             _bot_proc.wait()
-            print("⚠️ [FastAPI] Telegram Bot daemon exited. Auto-restarting in 2s...")
+            print("[FastAPI] Telegram Bot daemon exited. Auto-restarting in 2s...")
             time.sleep(2)
         except Exception as e:
-            print(f"❌ [FastAPI] Error starting Telegram Bot: {e}")
+            print(f"[FastAPI] Error starting Telegram Bot: {e}")
             time.sleep(5)
 
 app = FastAPI(
@@ -58,7 +58,7 @@ def on_startup():
         # Launch telegram bot daemon in a dedicated background supervisor thread
         t = threading.Thread(target=_telegram_bot_supervisor, daemon=True, name="TelegramBotSupervisor")
         t.start()
-        print("✅ [FastAPI] Telegram Bot supervisor background thread started!")
+        print("[FastAPI] Telegram Bot supervisor background thread started!")
 
 @app.on_event("shutdown")
 def on_shutdown():
