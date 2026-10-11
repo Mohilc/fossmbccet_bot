@@ -282,33 +282,52 @@ async def process_text_query(update: Update, query_text: str):
     user = update.effective_user
     user_id = user.id if user else None
     
-    if user:
-        database.register_or_update_user(user.id, user.username, user.first_name, user.last_name)
+    try:
+        if user:
+            database.register_or_update_user(user.id, user.username, user.first_name, user.last_name)
 
-    # Show typing indicator while AI processes
-    if update.effective_chat:
-        await context_bot_typing(update)
+        # Show typing indicator while AI processes
+        if update.effective_chat:
+            await context_bot_typing(update)
 
-    # Run AI reasoning in thread pool
-    analysis = await asyncio.to_thread(ai.analyze_text_query, query_text)
+        # Run AI reasoning in thread pool
+        analysis = await asyncio.to_thread(ai.analyze_text_query, query_text)
 
-    # Log to SQLite
-    query_id = database.log_query(
-        telegram_id=user_id,
-        query_type="text",
-        query_text=query_text,
-        response_text=analysis.get("direct_answer", ""),
-        category=analysis.get("category", "General FOSS"),
-        subcategory=analysis.get("subcategory", "General"),
-        difficulty=analysis.get("difficulty", "Beginner"),
-        tags=analysis.get("tags", [])
-    )
+        # Log to SQLite safely
+        query_id = None
+        try:
+            query_id = database.log_query(
+                telegram_id=user_id,
+                query_type="text",
+                query_text=query_text,
+                response_text=analysis.get("direct_answer", ""),
+                category=analysis.get("category", "General FOSS"),
+                subcategory=analysis.get("subcategory", "General"),
+                difficulty=analysis.get("difficulty", "Beginner"),
+                tags=analysis.get("tags", [])
+            )
+        except Exception as db_err:
+            logger.error(f"Failed to log query to DB: {db_err}")
 
-    # Format HTML response
-    formatted_msg = format_telegram_response(analysis, query_id=query_id)
-    reply_markup = get_response_actions_keyboard(query_id)
+        # Format HTML response
+        formatted_msg = format_telegram_response(analysis, query_id=query_id)
+        reply_markup = get_response_actions_keyboard(query_id) if query_id else None
 
-    await reply_message(update, formatted_msg, reply_markup=reply_markup)
+        await reply_message(update, formatted_msg, reply_markup=reply_markup)
+    except Exception as e:
+        logger.error(f"Error in process_text_query: {e}", exc_info=True)
+        # Always reply with fallback response so the user is never ignored
+        try:
+            fallback_analysis = ai._offline_fallback_analyzer(query_text)
+            fallback_msg = format_telegram_response(fallback_analysis)
+            await reply_message(update, fallback_msg)
+        except Exception as e2:
+            logger.error(f"Fatal fallback error: {e2}")
+            await reply_message(
+                update,
+                "🐧 <b>FOSS MBCCET Mentor</b>\n\n"
+                "Hey there! I am Tuxie, your FOSS MBCCET mentor. How can I help you today with Git, Linux, or open source?"
+            )
 
 async def context_bot_typing(update: Update):
     """Helper to send typing action safely."""
@@ -323,7 +342,8 @@ async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     Handles regular text messages.
     Supports both Private DMs and Community Groups:
       - In DMs: Answers every question directly.
-      - In Groups: Answers when mentioned (@fossmbccet_bot) or when replying to bot.
+      - In Groups: Answers when mentioned (@fossmbccet_bot), when replying to bot,
+        or when addressed by name ("tuxie", "fossbot").
     """
     if not update.effective_message or not update.effective_message.text:
         return
@@ -332,7 +352,7 @@ async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     chat = update.effective_chat
     bot_username = (context.bot.username or "").lower()
 
-    # If in a group chat, only trigger if mentioned or if replying to the bot
+    # If in a group chat, trigger if mentioned, replying to bot, or addressing tuxie/bot
     if chat and chat.type in [constants.ChatType.GROUP, constants.ChatType.SUPERGROUP]:
         is_reply_to_bot = (
             update.effective_message.reply_to_message and 
@@ -340,9 +360,10 @@ async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             update.effective_message.reply_to_message.from_user.id == context.bot.id
         )
         is_mentioned = bot_username and (f"@{bot_username}" in text.lower())
+        is_name_call = any(name in text.lower() for name in ["tuxie", "fossbot", "foss mbccet", "mbccet bot"])
 
-        if not (is_reply_to_bot or is_mentioned):
-            return  # Ignore casual chatter in groups unless mentioned or replied to
+        if not (is_reply_to_bot or is_mentioned or is_name_call):
+            return  # Ignore casual chatter in groups unless addressed to bot
 
         # Clean mention tag from query
         if bot_username:
@@ -456,7 +477,12 @@ def build_bot_application() -> Application:
     if not TELEGRAM_BOT_TOKEN:
         logger.warning("TELEGRAM_BOT_TOKEN is not set. Bot will not connect to Telegram until configured.")
 
-    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN or "DUMMY_TOKEN").build()
+    app = (
+        ApplicationBuilder()
+        .token(TELEGRAM_BOT_TOKEN or "DUMMY_TOKEN")
+        .concurrent_updates(True)
+        .build()
+    )
 
     # Commands
     app.add_handler(CommandHandler("start", start_command))
@@ -489,12 +515,12 @@ def main():
         print("\n=======================================================")
         print("⚠️  TELEGRAM_BOT_TOKEN is not set in .env or environment!")
         print("Please set TELEGRAM_BOT_TOKEN to launch the live Telegram daemon.")
-        print("=======================================================\n")
+        print("=======================================================")
         return
 
-    logger.info("Starting FOSS MBCCET Telegram Bot Daemon...")
+    logger.info("Starting FOSS MBCCET Telegram Bot Daemon with concurrent updates...")
     app = build_bot_application()
-    app.run_polling(drop_pending_updates=True)
+    app.run_polling(drop_pending_updates=False)
 
 if __name__ == "__main__":
     main()

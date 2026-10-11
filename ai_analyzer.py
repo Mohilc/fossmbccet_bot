@@ -54,13 +54,98 @@ class AIAnalyzer:
 
         # Text Reasoning Models Pool (Ordered by priority & speed)
         self.text_models: List[Tuple[str, str]] = [
-            (NVIDIA_NEMOTRON_MODEL, NVIDIA_NEMOTRON_KEY),
-            (NVIDIA_MUSE_MODEL, NVIDIA_MUSE_KEY)
+            (NVIDIA_NEMOTRON_MODEL, NVIDIA_NEMOTRON_KEY)
         ]
+
+    @staticmethod
+    def is_greeting(query: str) -> bool:
+        """Determines if a query is a general greeting, intro, or onboarding prompt."""
+        if not query:
+            return True
+            
+        clean = re.sub(r"[^\w\s]", "", query).strip().lower()
+        if not clean:
+            return True
+
+        greeting_set = {
+            "hi", "hello", "hey", "hii", "hiii", "heyy", "heyyy", "hlo", "hlw",
+            "hola", "yo", "sup", "howdy", "vanakkam", "namaste", "namaskaram",
+            "hai", "haai", "good morning", "good afternoon", "good evening",
+            "good day", "greetings", "start", "get started", "intro", "welcome",
+            "who are you", "what can you do", "help me", "hi tuxie", "hello tuxie",
+            "hey tuxie", "hi bot", "hello bot", "hey bot", "tuxie"
+        }
+
+        if clean in greeting_set:
+            return True
+
+        # Check if technical keywords are absent
+        tech_words = [
+            "git", "linux", "ubuntu", "bash", "code", "python", "docker", "error",
+            "bug", "license", "gsoc", "hacktoberfest", "terminal", "c++", "java",
+            "html", "css", "js", "react", "npm", "pip", "sudo", "chmod", "push",
+            "pull", "commit", "merge", "rebase", "branch", "repo", "clone"
+        ]
+        has_tech = any(tw in clean for tw in tech_words)
+
+        if not has_tech:
+            words = clean.split()
+            if words and words[0] in {"hi", "hello", "hey", "hola", "yo", "hai", "hlo", "welcome"} and len(words) <= 4:
+                return True
+
+        return False
+
+    @staticmethod
+    def get_greeting_analysis() -> Dict[str, Any]:
+        """Returns standard FOSS MBCCET onboarding mentor response."""
+        return {
+            "category": "General FOSS & Community",
+            "subcategory": "Initial Greeting / Onboarding",
+            "difficulty": "Beginner",
+            "tags": ["foss", "community", "welcome", "onboarding", "beginner"],
+            "summary": "Student sent a greeting with no specific question and needs onboarding guidance.",
+            "direct_answer": (
+                "Hey there! Welcome to FOSS MBCCET. A simple hi is a great start. "
+                "To help you best, tell me what you are working on or curious about: "
+                "Git & version control, Linux & shell, programming bugs, open source licensing, "
+                "FOSS alternatives to proprietary tools, or open source programs like GSoC, Hacktoberfest and Outreachy.\n\n"
+                "Share your OS, the error message or code you are stuck on, and what you have tried so far. "
+                "I will break it down step by step with runnable commands and FOSS best practices."
+            ),
+            "terminal_commands_or_code": (
+                "# Quick FOSS MBCCET starter check\n"
+                "whoami\n"
+                "uname -a\n"
+                "git --version\n\n"
+                "# Create a hello world repo locally\n"
+                "mkdir foss-hello && cd foss-hello\n"
+                "git init\n"
+                'echo "# FOSS MBCCET" > README.md\n'
+                "git add README.md\n"
+                'git commit -m "initial commit"'
+            ),
+            "recommended_foss_tools": ["Git", "Bash", "Linux", "GitHub"],
+            "foss_tip": "Every great open source contributor started with a simple 'hello world'!"
+        }
 
     def _clean_json_response(self, text: str) -> Dict[str, Any]:
         """Safely parses JSON even when surrounded by reasoning tokens or thoughts."""
         text = text.strip()
+
+        def _validate_and_normalize(parsed: Any) -> Optional[Dict[str, Any]]:
+            if isinstance(parsed, dict) and ("category" in parsed or "direct_answer" in parsed):
+                if "category" not in parsed:
+                    parsed["category"] = "General FOSS & Community"
+                if "subcategory" not in parsed:
+                    parsed["subcategory"] = "General"
+                if "difficulty" not in parsed:
+                    parsed["difficulty"] = "Beginner"
+                if "tags" not in parsed or not isinstance(parsed["tags"], list):
+                    parsed["tags"] = ["foss", "mbccet"]
+                if "direct_answer" not in parsed:
+                    parsed["direct_answer"] = parsed.get("summary", "")
+                return parsed
+            return None
 
         # 1. Look for ```json ... ``` blocks
         matches = re.findall(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
@@ -68,8 +153,9 @@ class AIAnalyzer:
             try:
                 candidate = m.strip()
                 parsed = json.loads(candidate)
-                if isinstance(parsed, dict) and "category" in parsed:
-                    return parsed
+                valid = _validate_and_normalize(parsed)
+                if valid:
+                    return valid
             except Exception:
                 pass
 
@@ -78,16 +164,18 @@ class AIAnalyzer:
         for c in reversed(curly_matches):
             try:
                 parsed = json.loads(c)
-                if isinstance(parsed, dict) and "category" in parsed:
-                    return parsed
+                valid = _validate_and_normalize(parsed)
+                if valid:
+                    return valid
             except Exception:
                 pass
 
         # 3. Direct parse
         try:
             parsed = json.loads(text)
-            if isinstance(parsed, dict) and "category" in parsed:
-                return parsed
+            valid = _validate_and_normalize(parsed)
+            if valid:
+                return valid
         except Exception:
             pass
 
@@ -100,7 +188,7 @@ class AIAnalyzer:
         messages: List[Dict[str, Any]],
         max_tokens: int = 1200,
         temperature: float = 0.2,
-        timeout: float = 7.0
+        timeout: float = 3.0
     ) -> str:
         """Calls a specific model on NVIDIA NIM with streaming/polling support."""
         if not api_key:
@@ -177,6 +265,9 @@ class AIAnalyzer:
 
     def _offline_fallback_analyzer(self, query: str, is_image: bool = False, caption: str = "") -> Dict[str, Any]:
         """Offline Pedagogical Heuristic Engine for FOSS MBCCET."""
+        if not is_image and self.is_greeting(query):
+            return self.get_greeting_analysis()
+
         q = (query + " " + caption).lower()
 
         if any(w in q for w in ["git", "branch", "merge", "rebase", "commit", "push", "pull", "stash", "checkout", "conflict", "head", "origin"]):
@@ -330,9 +421,12 @@ class AIAnalyzer:
 
     def analyze_text_query(self, user_query: str) -> Dict[str, Any]:
         """
-        Executes query through the multi-model cascade to get the best pedagogical response:
-        Meta Muse -> NVIDIA Nemotron -> Poolside Laguna -> Moonshot Kimi -> Gemini -> Offline Heuristic.
+        Executes query through the multi-model cascade to get the best pedagogical response.
+        Greetings and onboarding prompts are handled instantly.
         """
+        if self.is_greeting(user_query):
+            return self.get_greeting_analysis()
+
         prompt = get_text_query_prompt(user_query)
         messages = [
             {
@@ -342,7 +436,7 @@ class AIAnalyzer:
             {"role": "user", "content": prompt}
         ]
 
-        # 1. Iterate through NVIDIA NIM Text Models
+        # 1. Iterate through NVIDIA NIM Text Models (Fast 3s timeout)
         for model_name, api_key in self.text_models:
             if not api_key:
                 continue
@@ -351,7 +445,7 @@ class AIAnalyzer:
                     model=model_name,
                     api_key=api_key,
                     messages=messages,
-                    timeout=7.0
+                    timeout=3.0
                 )
                 if raw_text:
                     parsed = self._clean_json_response(raw_text)

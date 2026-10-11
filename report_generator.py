@@ -10,15 +10,15 @@ def format_telegram_response(analysis: Dict[str, Any], query_id: Optional[int] =
     Formats the AI analysis into clean, descriptive HTML for Telegram.
     Simple, clear format for an open source community helper bot.
     """
-    category = html.escape(str(analysis.get("category", "General FOSS")))
-    subcategory = html.escape(str(analysis.get("subcategory", "General")))
-    difficulty = html.escape(str(analysis.get("difficulty", "Beginner")))
-    summary = html.escape(str(analysis.get("summary", "")))
-    direct_answer = html.escape(str(analysis.get("direct_answer", "")))
+    category = html.escape(str(analysis.get("category", "General FOSS")), quote=False)
+    subcategory = html.escape(str(analysis.get("subcategory", "General")), quote=False)
+    difficulty = html.escape(str(analysis.get("difficulty", "Beginner")), quote=False)
+    summary = html.escape(str(analysis.get("summary", "")), quote=False)
+    direct_answer = html.escape(str(analysis.get("direct_answer", "")), quote=False)
     code = str(analysis.get("terminal_commands_or_code", ""))
-    tools = [html.escape(str(t)) for t in analysis.get("recommended_foss_tools", [])]
-    tip = html.escape(str(analysis.get("foss_tip", "")))
-    tags = [f"#{html.escape(t.replace(' ', ''))}" for t in analysis.get("tags", [])]
+    tools = [html.escape(str(t), quote=False) for t in analysis.get("recommended_foss_tools", [])]
+    tip = html.escape(str(analysis.get("foss_tip", "")), quote=False)
+    tags = [f"#{html.escape(str(t).replace(' ', ''), quote=False)}" for t in analysis.get("tags", [])]
 
     # Difficulty indicator
     diff_icon = "🟢" if difficulty == "Beginner" else ("🟡" if difficulty == "Intermediate" else "🔴")
@@ -34,7 +34,7 @@ def format_telegram_response(analysis: Dict[str, Any], query_id: Optional[int] =
     parts.append(f"\n💡 <b>Explanation:</b>\n{direct_answer}")
 
     if code and code.strip():
-        escaped_code = html.escape(code)
+        escaped_code = html.escape(code, quote=False)
         parts.append(f"\n💻 <b>Terminal Commands / Solution:</b>\n<pre><code>{escaped_code}</code></pre>")
 
     if tools:

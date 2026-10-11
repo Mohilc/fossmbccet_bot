@@ -1,16 +1,25 @@
 #!/usr/bin/env bash
 set -e
 
+export PYTHONUNBUFFERED=1
+
 echo "🐧 ==========================================="
 echo "🚀 Launching FOSS MBCCET Services on Render"
 echo "🐧 ==========================================="
 
-# 1. Start Telegram Bot Daemon in the background
+# 1. Start Telegram Bot Daemon in the background with auto-restart supervisor
 if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
-    echo "🤖 Starting Telegram Bot Daemon in background..."
-    python telegram_bot.py &
+    echo "🤖 Starting Telegram Bot Supervisor in background..."
+    (
+        while true; do
+            echo "🚀 Launching telegram_bot.py daemon..."
+            python telegram_bot.py || true
+            echo "⚠️ Telegram bot process exited. Restarting in 2 seconds..."
+            sleep 2
+        done
+    ) &
     BOT_PID=$!
-    echo "✅ Telegram Bot daemon running (PID: $BOT_PID)"
+    echo "✅ Telegram Bot supervisor running (PID: $BOT_PID)"
 else
     echo "⚠️ TELEGRAM_BOT_TOKEN is not set. Telegram Bot will not start."
 fi
