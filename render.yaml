@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: fossmbccet-bot
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash start.sh
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: HOST
+        value: 0.0.0.0
+      - key: COMMUNITY_NAME
+        value: FOSS MBCCET
+      - key: COLLEGE_NAME
+        value: Mar Baselios Christian College of Engineering and Technology (MBCCET)
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: NVIDIA_VISION_KEY
+        sync: false
+      - key: NVIDIA_VISION_MODEL
+        value: google/diffusiongemma-26b-a4b-it
+      - key: NVIDIA_NEMOTRON_KEY
+        sync: false
+      - key: NVIDIA_NEMOTRON_MODEL
+        value: nvidia/nemotron-3.5-lightning-30b-a3b
+      - key: NVIDIA_MUSE_KEY
+        sync: false
+      - key: NVIDIA_MUSE_MODEL
+        value: meta/muse-glimmer-30b
+      - key: NVIDIA_LAGUNA_KEY
+        sync: false
+      - key: NVIDIA_LAGUNA_MODEL
+        value: poolside/laguna-xs-2.1
+      - key: NVIDIA_KIMI_KEY
+        sync: false
+      - key: NVIDIA_KIMI_MODEL
+        value: moonshotai/kimi-k3
+      - key: GEMINI_API_KEY
+        sync: false
