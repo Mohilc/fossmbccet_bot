@@ -74,10 +74,54 @@ def get_response_actions_keyboard(query_id: int) -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(keyboard)
 
+async def reply_message(update: Update, text: str, reply_markup: Optional[InlineKeyboardMarkup] = None):
+    """
+    Robust sender helper that works seamlessly for:
+      - Direct messages
+      - Group chat messages
+      - Inline button callback queries (where update.message is None)
+    """
+    # Telegram limit per message is 4096 characters; split if longer
+    if len(text) > 4000:
+        chunks = [text[i:i+4000] for i in range(0, len(text), 4000)]
+    else:
+        chunks = [text]
+
+    for idx, chunk in enumerate(chunks):
+        markup = reply_markup if idx == len(chunks) - 1 else None
+        sent = False
+
+        # Attempt 1: Reply via callback message or effective message in HTML
+        try:
+            if update.effective_message:
+                await update.effective_message.reply_html(chunk, reply_markup=markup)
+                sent = True
+            elif update.callback_query and update.callback_query.message:
+                await update.callback_query.message.reply_html(chunk, reply_markup=markup)
+                sent = True
+        except Exception as e:
+            logger.warning(f"HTML reply error ({e}), trying chat.send_message")
+
+        # Attempt 2: Send via effective_chat in HTML
+        if not sent and update.effective_chat:
+            try:
+                await update.effective_chat.send_message(chunk, parse_mode=constants.ParseMode.HTML, reply_markup=markup)
+                sent = True
+            except Exception as e:
+                logger.warning(f"Chat HTML send error ({e}), trying plain text fallback")
+
+        # Attempt 3: Plain text fallback if HTML parse failed
+        if not sent and update.effective_chat:
+            try:
+                await update.effective_chat.send_message(chunk, reply_markup=markup)
+                sent = True
+            except Exception as e:
+                logger.error(f"Fatal send failure: {e}")
+
 # ==================== COMMAND HANDLERS ====================
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles the /start command."""
+    """Handles the /start command with clean universal community messaging."""
     user = update.effective_user
     if user:
         database.register_or_update_user(
@@ -90,18 +134,19 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         f"🐧 <b>Welcome to {COMMUNITY_NAME}!</b>\n"
         f"<i>The Open Source Knowledge & Doubt Solver for {COLLEGE_NAME}</i>\n\n"
-        f"Hello <b>{user.first_name if user else 'Hacker'}</b>! I am <b>Tuxie</b>, your 24/7 FOSS mentor.\n\n"
-        f"<b>What I can do for you:</b>\n"
-        f"• 💡 <b>Ask Any Doubt:</b> Type your coding or open source question directly.\n"
-        f"• 📸 <b>Screenshot Diagnostic:</b> Send a photo of your terminal error, compiler bug, or Git conflict.\n"
-        f"• 🌿 <b>Git & GitHub:</b> Master branching, rebasing, and merge conflicts.\n"
-        f"• 🐧 <b>Linux CLI:</b> Permissions (chmod), bash scripts, systemctl.\n"
-        f"• 📜 <b>FOSS Licensing:</b> Understand GPLv3, MIT, Apache, and Copyleft.\n"
-        f"• 🌟 <b>GSoC & Hacktoberfest:</b> How to find issues and make your first PR.\n\n"
+        f"I am <b>Tuxie</b>, the official FOSS Community AI Mentor.\n\n"
+        f"<b>What I can do for our community:</b>\n"
+        f"• 💡 <b>Ask Any Doubt:</b> Send any coding, debugging, or open-source question.\n"
+        f"• 📸 <b>Terminal & Code Diagnostics:</b> Send a photo of terminal errors, compiler bugs, or Git conflicts.\n"
+        f"• 🌿 <b>Git & GitHub:</b> Branching, rebasing, PR workflows, and merge conflicts.\n"
+        f"• 🐧 <b>Linux CLI:</b> Permissions (chmod), bash scripts, systemctl services.\n"
+        f"• 📜 <b>FOSS Licensing:</b> Understand MIT, Apache 2.0, GPLv3, AGPLv3, and Copyleft.\n"
+        f"• 🌟 <b>Programs:</b> Roadmaps for Google Summer of Code (GSoC), Hacktoberfest, Outreachy.\n\n"
         f"👇 <i>Choose a topic below or type your question directly:</i>"
     )
 
-    await update.message.reply_html(
+    await reply_message(
+        update,
         welcome_text,
         reply_markup=get_main_menu_keyboard()
     )
@@ -111,24 +156,25 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         f"📖 <b>{COMMUNITY_NAME} Bot Guide</b>\n\n"
         f"<b>Available Commands:</b>\n"
-        f"• <code>/start</code> - Restart bot & open main navigation\n"
-        f"• <code>/ask &lt;question&gt;</code> - Submit a specific technical doubt\n"
+        f"• <code>/start</code> - Open main community navigation\n"
+        f"• <code>/ask &lt;question&gt;</code> - Submit a technical doubt\n"
         f"• <code>/classify &lt;topic&gt;</code> - Categorize any doubt & view suggested tags\n"
         f"• <code>/git</code> - Git cheat sheet & workflow guide\n"
         f"• <code>/linux</code> - Essential Linux commands & permissions\n"
         f"• <code>/licenses</code> - Open source license breakdown\n"
         f"• <code>/programs</code> - Guide to GSoC, Hacktoberfest & Outreachy\n"
-        f"• <code>/stats</code> - Live community doubts statistics\n"
+        f"• <code>/stats</code> - Live community doubt statistics\n"
         f"• <code>/community</code> - FOSS MBCCET GitHub and channels\n"
         f"• <code>/help</code> - Show this manual\n\n"
-        f"💡 <i>Tip: You don't even need to type /ask! Just send your question or screenshot directly.</i>"
+        f"💡 <i>Tip: You can just type questions or send screenshots directly!</i>"
     )
-    await update.message.reply_html(help_text)
+    await reply_message(update, help_text)
 
 async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles /ask <query>."""
     if not context.args:
-        await update.message.reply_html(
+        await reply_message(
+            update,
             "⚠️ <b>Please include your question!</b>\nExample: <code>/ask How do I resolve a Git merge conflict?</code>"
         )
         return
@@ -139,13 +185,15 @@ async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def classify_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles /classify <query> to return structured categorization."""
     if not context.args:
-        await update.message.reply_html(
+        await reply_message(
+            update,
             "⚠️ <b>Please specify what to classify!</b>\nExample: <code>/classify What is the difference between MIT and GPL?</code>"
         )
         return
 
     query_text = " ".join(context.args)
-    await update.message.reply_chat_action(constants.ChatAction.TYPING)
+    if update.effective_chat:
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=constants.ChatAction.TYPING)
 
     classification = ai.classify_query(query_text)
     tags_formatted = " ".join([f"#{t}" for t in classification.get("tags", [])])
@@ -160,13 +208,14 @@ async def classify_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🛠️ <b>Relevant FOSS Tools:</b> {tools_formatted}\n\n"
         f"<i>Want the full pedagogical explanation? Simply type: /ask {query_text}</i>"
     )
-    await update.message.reply_html(response)
+    await reply_message(update, response)
 
 async def git_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles /git quick reference."""
     resource = database.get_resource("git")
     text = resource["content"] if resource else "Git essentials cheat sheet."
-    await update.message.reply_html(
+    await reply_message(
+        update,
         f"🌿 <b>Git & Version Control Quickref</b>\n\n<pre><code>{text}</code></pre>"
     )
 
@@ -174,7 +223,8 @@ async def linux_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles /linux essentials."""
     resource = database.get_resource("linux")
     text = resource["content"] if resource else "Linux commands."
-    await update.message.reply_html(
+    await reply_message(
+        update,
         f"🐧 <b>Linux Command Essentials</b>\n\n<pre><code>{text}</code></pre>"
     )
 
@@ -182,7 +232,8 @@ async def licenses_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles /licenses guide."""
     resource = database.get_resource("licenses")
     text = resource["content"] if resource else "Open source licenses."
-    await update.message.reply_html(
+    await reply_message(
+        update,
         f"📜 <b>Open Source Licenses Guide</b>\n\n{text}"
     )
 
@@ -190,7 +241,8 @@ async def programs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles /programs guide."""
     resource = database.get_resource("programs")
     text = resource["content"] if resource else "Open source programs."
-    await update.message.reply_html(
+    await reply_message(
+        update,
         f"🌟 <b>Open Source Mentorship Programs</b>\n\n{text}"
     )
 
@@ -205,13 +257,13 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     stats_msg = (
         f"📊 <b>{COMMUNITY_NAME} • Live Community Pulse</b>\n\n"
-        f"👥 <b>Active Students:</b> {stats.get('total_students', 0)}\n"
+        f"👥 <b>Active Members:</b> {stats.get('total_students', 0)}\n"
         f"💡 <b>Total Doubts Resolved:</b> {stats.get('total_doubts_resolved', 0)}\n"
         f"📸 <b>Screenshots Diagnosed:</b> {stats.get('code_screenshots_analyzed', 0)}\n\n"
         f"🏆 <b>Top Query Topics:</b>\n{categories_str}\n\n"
         f"<i>Keep asking, hacking, and sharing open source knowledge!</i>"
     )
-    await update.message.reply_html(stats_msg)
+    await reply_message(update, stats_msg)
 
 async def community_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles /community info."""
@@ -223,7 +275,7 @@ async def community_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• <b>Telegram Group:</b> {COMMUNITY_TELEGRAM}\n\n"
         f"🤝 Join our regular hackathons, install fests, and open-source contribution sprints!"
     )
-    await update.message.reply_html(comm_msg)
+    await reply_message(update, comm_msg)
 
 # ==================== MESSAGE PROCESSING ====================
 
@@ -236,7 +288,8 @@ async def process_text_query(update: Update, query_text: str):
         database.register_or_update_user(user.id, user.username, user.first_name, user.last_name)
 
     # Show typing indicator while AI processes
-    await update.message.reply_chat_action(constants.ChatAction.TYPING)
+    if update.effective_chat:
+        await context_bot_typing(update)
 
     # Run AI reasoning
     analysis = ai.analyze_text_query(query_text)
@@ -257,69 +310,114 @@ async def process_text_query(update: Update, query_text: str):
     formatted_msg = format_telegram_response(analysis, query_id=query_id)
     reply_markup = get_response_actions_keyboard(query_id)
 
-    await update.message.reply_html(formatted_msg, reply_markup=reply_markup)
+    await reply_message(update, formatted_msg, reply_markup=reply_markup)
+
+async def context_bot_typing(update: Update):
+    """Helper to send typing action safely."""
+    try:
+        if update.effective_message:
+            await update.effective_message.reply_chat_action(constants.ChatAction.TYPING)
+    except Exception:
+        pass
 
 async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles regular text messages as natural language queries."""
-    if not update.message or not update.message.text:
+    """
+    Handles regular text messages.
+    Supports both Private DMs and Community Groups:
+      - In DMs: Answers every question directly.
+      - In Groups: Answers when mentioned (@fossmbccet_bot) or when replying to bot.
+    """
+    if not update.effective_message or not update.effective_message.text:
         return
-    text = update.message.text.strip()
+
+    text = update.effective_message.text.strip()
+    chat = update.effective_chat
+    bot_username = (context.bot.username or "").lower()
+
+    # If in a group chat, only trigger if mentioned or if replying to the bot
+    if chat and chat.type in [constants.ChatType.GROUP, constants.ChatType.SUPERGROUP]:
+        is_reply_to_bot = (
+            update.effective_message.reply_to_message and 
+            update.effective_message.reply_to_message.from_user and 
+            update.effective_message.reply_to_message.from_user.id == context.bot.id
+        )
+        is_mentioned = bot_username and (f"@{bot_username}" in text.lower())
+
+        if not (is_reply_to_bot or is_mentioned):
+            return  # Ignore casual chatter in groups unless mentioned or replied to
+
+        # Clean mention tag from query
+        if bot_username:
+            text = text.replace(f"@{context.bot.username}", "").replace(f"@{bot_username}", "").strip()
+
+    if not text:
+        return
+
     await process_text_query(update, text)
 
 async def photo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles photos & screenshots of code or terminal errors."""
+    if not update.effective_message or not update.effective_message.photo:
+        return
+
     user = update.effective_user
     user_id = user.id if user else None
 
     if user:
         database.register_or_update_user(user.id, user.username, user.first_name, user.last_name)
 
-    caption = update.message.caption or ""
+    caption = update.effective_message.caption or ""
 
     # Send status
-    status_msg = await update.message.reply_html("🔍 <i>Tuxie is inspecting your screenshot & running diagnostics...</i>")
-    await update.message.reply_chat_action(constants.ChatAction.UPLOAD_PHOTO)
+    status_msg = await update.effective_message.reply_html("🔍 <i>Tuxie is inspecting your screenshot & running diagnostics...</i>")
 
-    # Download highest-resolution photo
-    photo = update.message.photo[-1]
-    file = await photo.get_file()
+    try:
+        # Download highest-resolution photo
+        photo = update.effective_message.photo[-1]
+        file = await photo.get_file()
 
-    filename = f"screenshot_{user_id}_{photo.file_unique_id}.jpg"
-    local_path = UPLOADS_DIR / filename
-    await file.download_to_drive(str(local_path))
+        filename = f"screenshot_{user_id}_{photo.file_unique_id}.jpg"
+        local_path = UPLOADS_DIR / filename
+        await file.download_to_drive(str(local_path))
 
-    # Run Multimodal AI Vision
-    analysis = ai.analyze_image_query(str(local_path), caption=caption)
+        # Run Multimodal AI Vision
+        analysis = ai.analyze_image_query(str(local_path), caption=caption)
 
-    # Log in SQLite
-    query_id = database.log_query(
-        telegram_id=user_id,
-        query_type="photo",
-        query_text=caption if caption else "Code/Terminal Screenshot Diagnostic",
-        response_text=analysis.get("direct_answer", ""),
-        category=analysis.get("category", "Programming & Bug Debugging"),
-        subcategory=analysis.get("subcategory", "Visual Diagnosis"),
-        difficulty=analysis.get("difficulty", "Intermediate"),
-        tags=analysis.get("tags", []),
-        image_path=str(local_path)
-    )
+        # Log in SQLite
+        query_id = database.log_query(
+            telegram_id=user_id,
+            query_type="photo",
+            query_text=caption if caption else "Code/Terminal Screenshot Diagnostic",
+            response_text=analysis.get("direct_answer", ""),
+            category=analysis.get("category", "Programming & Bug Debugging"),
+            subcategory=analysis.get("subcategory", "Visual Diagnosis"),
+            difficulty=analysis.get("difficulty", "Intermediate"),
+            tags=analysis.get("tags", []),
+            image_path=str(local_path)
+        )
 
-    # Format Response
-    formatted_msg = format_telegram_response(analysis, query_id=query_id)
-    reply_markup = get_response_actions_keyboard(query_id)
+        # Format Response
+        formatted_msg = format_telegram_response(analysis, query_id=query_id)
+        reply_markup = get_response_actions_keyboard(query_id)
 
-    # Edit status message or send reply
-    await status_msg.delete()
-    await update.message.reply_html(formatted_msg, reply_markup=reply_markup)
+        # Edit status message or send reply
+        await status_msg.delete()
+        await update.effective_message.reply_html(formatted_msg, reply_markup=reply_markup)
+    except Exception as e:
+        logger.error(f"Photo handling error: {e}")
+        await status_msg.edit_text("⚠️ Could not process screenshot. Please try again or paste the text error.")
 
 # ==================== CALLBACK QUERY HANDLER ====================
 
 async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles inline button clicks for feedback, cheat sheets, and PDF export."""
     query = update.callback_query
+    if not query:
+        return
+        
     await query.answer()
 
-    data = query.data
+    data = query.data or ""
     user = update.effective_user
     user_id = user.id if user else 0
 
@@ -327,22 +425,22 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         query_id = int(data.split("_")[-1])
         database.add_feedback(query_id, user_id, 1)
         await query.edit_message_reply_markup(reply_markup=None)
-        await query.message.reply_html("🎉 <b>Glad that resolved your doubt! Happy open-source hacking!</b>")
+        await reply_message(update, "🎉 <b>Glad that resolved your doubt! Happy open-source hacking!</b>")
 
     elif data.startswith("fb_down_"):
         query_id = int(data.split("_")[-1])
         database.add_feedback(query_id, user_id, -1)
         await query.edit_message_reply_markup(reply_markup=None)
-        await query.message.reply_html("🙏 <b>Thanks for the feedback. Feel free to rephrase or send a screenshot so I can dig deeper!</b>")
+        await reply_message(update, "🙏 <b>Thanks for the feedback. Feel free to rephrase or send a screenshot so I can dig deeper!</b>")
 
     elif data.startswith("pdf_"):
         query_id = int(data.split("_")[-1])
-        # Generate PDF report for this query
         recent = database.get_recent_queries(limit=50)
         selected = next((q for q in recent if q["id"] == query_id), None)
         
         if selected:
-            await query.message.reply_chat_action(constants.ChatAction.UPLOAD_DOCUMENT)
+            if update.effective_chat:
+                await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=constants.ChatAction.UPLOAD_DOCUMENT)
             analysis = {
                 "category": selected.get("category"),
                 "subcategory": selected.get("subcategory"),
@@ -358,13 +456,14 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
                 student_name=user.first_name if user else "FOSS Student"
             )
             with open(pdf_path, "rb") as doc:
-                await query.message.reply_document(
-                    document=doc,
-                    filename=Path(pdf_path).name,
-                    caption=f"📄 Here is your technical reference card for Query #{query_id}."
-                )
+                if query.message:
+                    await query.message.reply_document(
+                        document=doc,
+                        filename=Path(pdf_path).name,
+                        caption=f"📄 Technical reference card for Query #{query_id}."
+                    )
         else:
-            await query.message.reply_html("⚠️ Could not locate query reference for PDF generation.")
+            await reply_message(update, "⚠️ Could not locate query reference for PDF generation.")
 
     elif data == "menu_git":
         await git_command(update, context)
