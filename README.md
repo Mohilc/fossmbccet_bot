@@ -25,13 +25,76 @@ In early prototypes, Streamlit was often used for dashboards. However, for a 24/
 
 ---
 
+## 🏗️ System Architecture & Working Flow
+
+![FOSS MBCCET Bot Architecture](docs/bot_architecture.png)
+
+### 🔄 End-to-End Workflow Diagram
+
+```mermaid
+graph TD
+    classDef client fill:#1e293b,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef server fill:#0f172a,stroke:#34d399,stroke-width:2px,color:#f8fafc;
+    classDef ai fill:#1e1b4b,stroke:#a855f7,stroke-width:2px,color:#f8fafc;
+    classDef db fill:#042f2e,stroke:#14b8a6,stroke-width:2px,color:#f8fafc;
+    classDef resp fill:#18181b,stroke:#f59e0b,stroke-width:2px,color:#f8fafc;
+
+    User[👤 Telegram Student / Group Chat]:::client -->|Text Question / Code Screenshot| BotDaemon[🤖 Telegram Polling Daemon]:::server
+    FastAPI[⚡ FastAPI Web Portal & Health Check]:::server -->|Supervises Lifecycle 24/7| BotDaemon
+
+    BotDaemon -->|1. Instant Greeting Check| GCheck{Is Greeting?}:::server
+    GCheck -->|Yes (<0.01s)| FastWelcome[👋 Welcome & Starter Commands]:::resp
+    GCheck -->|No| AIAnalyzer[🧠 Multi-Engine AI Reasoning Cascade]:::ai
+
+    subgraph AI Ensemble [Multi-Model Cascade & Failover]
+        AIAnalyzer -->|1. Primary: Ultra-Fast 1-2s| Gemma[Google DiffusionGemma 26b]:::ai
+        AIAnalyzer -->|2. Code Specialist| Laguna[Poolside Laguna XS 2.1]:::ai
+        AIAnalyzer -->|3. Deep Logic| Nemotron[NVIDIA Nemotron 3.5]:::ai
+        AIAnalyzer -->|4. Reasoning| Muse[Meta Muse Glimmer 30b]:::ai
+        AIAnalyzer -->|5. Zero-Downtime Fallback| Heuristics[Pedagogical Heuristics Engine]:::ai
+    end
+
+    AIAnalyzer -->|Validated Structured JSON| Formatter[📄 Response Formatter & Language Highlighter]:::server
+    FastWelcome --> TelegramReply[🐧 Telegram HTML Response]:::resp
+    Formatter -->|Log Query & Feedback| SQLite[(🗄️ SQLite Database)]:::db
+
+    Formatter --> TelegramReply
+
+    subgraph Output Structure [Intuitive 3-Part Layout]
+        TelegramReply --> Out1[🏷️ Category Badge: Topic & Subtopic]:::resp
+        TelegramReply --> Out2[💡 Crisp Direct Answer: 2-3 High-Impact Sentences]:::resp
+        TelegramReply --> Out3[💻 Language Code: Python, C/C++, JS, or Commands]:::resp
+        TelegramReply --> Out4[🌟 Practical Pro-Tip: Single Hack/Best Practice]:::resp
+    end
+
+    TelegramReply -->|Delivered Directly in Chat| User
+```
+
+### ⚙️ How the Bot Works (Step-by-Step)
+
+1. **Inquiry Ingestion:**
+   - **Private DMs:** Tuxie responds directly to student questions and uploaded code screenshots.
+   - **Community Groups:** The bot listens for direct mentions (`@fossmbccet_bot`), message replies, or name addresses (`tuxie`), ignoring casual chatter.
+2. **Instant Pre-Filter & Onboarding:**
+   - Common greetings (`hi`, `hello`, `namaste`) bypass model inference and return a friendly welcome onboarding card in `< 0.01s`.
+3. **Multi-Model AI Reasoning Cascade:**
+   - Requests are routed to **Google DiffusionGemma 26b** (sub-2s latency). If any endpoint encounters a rate limit or 503, the request automatically falls through to **Poolside Laguna**, **NVIDIA Nemotron 3.5**, **Meta Muse Glimmer**, or the local **Pedagogical Heuristics Engine**.
+4. **Smart Language & Code Badge Detection:**
+   - Identifies code semantics: Python (`def`, `class ListNode`), C/C++ (`#include`, `malloc`), JavaScript (`async`, `fetch`), Docker, or Bash (`git`, `systemctl`, `df -h`).
+5. **3-Part Essential Output Formatting:**
+   - Filters out fluff and presents a clean 3-part layout with Telegram `<pre><code class="language-...">` syntax highlighting.
+6. **Telemetry & Feedback Persistence:**
+   - Logs query statistics, category distribution, and student thumbs-up/down ratings to SQLite for the community dashboard.
+
+---
+
 ## 📂 Project Architecture
 
 ```
 fossmbccet/
 ├── app.py                      # FastAPI Evaluator Control Center & Live Telemetry API
 ├── telegram_bot.py             # 24/7 Telegram Bot Daemon (Text Q&A, Photo Diagnostics)
-├── ai_analyzer.py              # Multi-Engine AI Ensemble (DiffusionGemma, Muse Glimmer, Nemotron, Laguna, Kimi)
+├── ai_analyzer.py              # Multi-Engine AI Ensemble (DiffusionGemma, Laguna, Nemotron, Muse, Kimi)
 ├── prompts.py                  # System instructions, classification taxonomies & schemas
 ├── database.py                 # SQLite persistence layer with migrations & telemetry
 ├── report_generator.py         # Telegram HTML message formatter & ReportLab PDF generator
@@ -43,6 +106,9 @@ fossmbccet/
 ├── .gitignore                  # Git protection rules (.env, *.db, cache)
 ├── .env.example                # Configuration template
 │
+├── docs/
+│   └── bot_architecture.png   # Complete architecture & workflow infographic
+│
 ├── data/
 │   ├── fossmbccet.db           # SQLite database (auto-created on startup)
 │   └── uploads/                # Cached screenshots & generated PDF reports
@@ -50,7 +116,8 @@ fossmbccet/
 ├── static/                     # Embedded sleek dark-mode FOSS dashboard
 │   ├── index.html              # Cyberpunk/FOSS terminal dashboard UI
 │   ├── style.css               # Rich glassmorphic CSS styling
-│   └── app.js                  # Dynamic client telemetry & interactive solver
+│   ├── app.js                  # Dynamic client telemetry & interactive solver
+│   └── bot_architecture.png   # Architecture asset
 │
 └── tests/
     └── test_end_to_end.py      # Automated tests for AI engine, DB, API & Bot handlers
@@ -94,7 +161,7 @@ Classifies every inquiry into standard taxonomies:
 - Recommended FOSS ecosystem tools
 
 ### 4. 📄 PDF Diagnostic Report Generator
-Students can click the **"Download PDF Report"** button in Telegram to receive a clean, professionally formatted ReportLab PDF reference card summarizing the resolution.
+Club mentors and evaluators can export clean, professionally formatted ReportLab PDF reference cards and cheatsheets summarizing query solutions via the FastAPI evaluator dashboard and API endpoints.
 
 ---
 
