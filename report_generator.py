@@ -3,54 +3,53 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from config import UPLOADS_DIR, COMMUNITY_NAME
+from config import UPLOADS_DIR
 
 def format_telegram_response(analysis: Dict[str, Any], query_id: Optional[int] = None) -> str:
     """
-    Formats the AI analysis into safe, elegant HTML for Telegram messages.
-    Uses HTML tags (<b>, <i>, <code>, <pre>) which are much more robust
-    against special characters than Telegram MarkdownV2.
+    Formats the AI analysis into clean, descriptive HTML for Telegram.
+    Simple, clear format for an open source community helper bot.
     """
     category = html.escape(str(analysis.get("category", "General FOSS")))
     subcategory = html.escape(str(analysis.get("subcategory", "General")))
     difficulty = html.escape(str(analysis.get("difficulty", "Beginner")))
     summary = html.escape(str(analysis.get("summary", "")))
     direct_answer = html.escape(str(analysis.get("direct_answer", "")))
-    code = html.escape(str(analysis.get("terminal_commands_or_code", "")))
+    code = str(analysis.get("terminal_commands_or_code", ""))
     tools = [html.escape(str(t)) for t in analysis.get("recommended_foss_tools", [])]
     tip = html.escape(str(analysis.get("foss_tip", "")))
     tags = [f"#{html.escape(t.replace(' ', ''))}" for t in analysis.get("tags", [])]
 
-    # Difficulty indicator icon
+    # Difficulty indicator
     diff_icon = "🟢" if difficulty == "Beginner" else ("🟡" if difficulty == "Intermediate" else "🔴")
 
-    message_parts = [
-        f"🐧 <b>{COMMUNITY_NAME} Mentor</b>",
-        f"📂 <b>Category:</b> {category} <i>({subcategory})</i>",
-        f"{diff_icon} <b>Level:</b> {difficulty}\n",
-    ]
+    parts = []
+    parts.append(f"🐧 <b>FOSS MBCCET Mentor</b>")
+    parts.append(f"📂 <b>Category:</b> {category} ({subcategory})")
+    parts.append(f"{diff_icon} <b>Level:</b> {difficulty}")
 
     if summary:
-        message_parts.append(f"📌 <b>Summary:</b> {summary}\n")
+        parts.append(f"\n📌 <b>Summary:</b> {summary}")
 
-    message_parts.append(f"💡 <b>Explanation:</b>\n{direct_answer}\n")
+    parts.append(f"\n💡 <b>Explanation:</b>\n{direct_answer}")
 
     if code and code.strip():
-        message_parts.append(f"💻 <b>Terminal Commands / Solution:</b>\n<pre><code>{code}</code></pre>\n")
+        escaped_code = html.escape(code)
+        parts.append(f"\n💻 <b>Terminal Commands / Solution:</b>\n<pre><code>{escaped_code}</code></pre>")
 
     if tools:
-        message_parts.append(f"🛠️ <b>FOSS Tools:</b> {', '.join(tools)}")
+        parts.append(f"\n🛠️ <b>FOSS Tools:</b> {', '.join(tools)}")
 
     if tip:
-        message_parts.append(f"🐧 <b>Did you know?</b> {tip}")
+        parts.append(f"🐧 <b>Did you know?</b> 🐧 <i>FOSS Pro-Tip:</i> {tip}")
 
     if tags:
-        message_parts.append(f"\n🏷️ {' '.join(tags)}")
+        parts.append(f"\n🏷️ {' '.join(tags)}")
 
     if query_id:
-        message_parts.append(f"\n<i>Ref ID: #{query_id}</i>")
+        parts.append(f"\nRef ID: #{query_id}")
 
-    return "\n".join(message_parts)
+    return "\n".join(parts)
 
 def generate_pdf_report(
     analysis: Dict[str, Any],

@@ -31,7 +31,7 @@ from config import (
 )
 import database
 from ai_analyzer import AIAnalyzer
-from report_generator import format_telegram_response, generate_pdf_report
+from report_generator import format_telegram_response
 
 # Configure Logging
 logging.basicConfig(
@@ -68,9 +68,6 @@ def get_response_actions_keyboard(query_id: int) -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton("👍 Solved It", callback_data=f"fb_up_{query_id}"),
             InlineKeyboardButton("👎 Still Confused", callback_data=f"fb_down_{query_id}")
-        ],
-        [
-            InlineKeyboardButton("📄 Download PDF Report", callback_data=f"pdf_{query_id}")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -436,39 +433,6 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         database.add_feedback(query_id, user_id, -1)
         await query.edit_message_reply_markup(reply_markup=None)
         await reply_message(update, "🙏 <b>Thanks for the feedback. Feel free to rephrase or send a screenshot so I can dig deeper!</b>")
-
-    elif data.startswith("pdf_"):
-        query_id = int(data.split("_")[-1])
-        recent = database.get_recent_queries(limit=50)
-        selected = next((q for q in recent if q["id"] == query_id), None)
-        
-        if selected:
-            if update.effective_chat:
-                await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=constants.ChatAction.UPLOAD_DOCUMENT)
-            analysis = {
-                "category": selected.get("category"),
-                "subcategory": selected.get("subcategory"),
-                "difficulty": selected.get("difficulty"),
-                "direct_answer": selected.get("snippet", ""),
-                "terminal_commands_or_code": "",
-                "recommended_foss_tools": [],
-                "foss_tip": "Keep learning and contributing to open source software!"
-            }
-            pdf_path = await asyncio.to_thread(
-                generate_pdf_report,
-                analysis=analysis,
-                query_text=selected.get("query_text", ""),
-                student_name=user.first_name if user else "FOSS Student"
-            )
-            with open(pdf_path, "rb") as doc:
-                if query.message:
-                    await query.message.reply_document(
-                        document=doc,
-                        filename=Path(pdf_path).name,
-                        caption=f"📄 Technical reference card for Query #{query_id}."
-                    )
-        else:
-            await reply_message(update, "⚠️ Could not locate query reference for PDF generation.")
 
     elif data == "menu_git":
         await git_command(update, context)
