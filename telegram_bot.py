@@ -1,4 +1,5 @@
 import os
+import asyncio
 import logging
 from pathlib import Path
 from typing import Optional
@@ -195,7 +196,7 @@ async def classify_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat:
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=constants.ChatAction.TYPING)
 
-    classification = ai.classify_query(query_text)
+    classification = await asyncio.to_thread(ai.classify_query, query_text)
     tags_formatted = " ".join([f"#{t}" for t in classification.get("tags", [])])
     tools_formatted = ", ".join(classification.get("foss_tools", []))
 
@@ -291,8 +292,8 @@ async def process_text_query(update: Update, query_text: str):
     if update.effective_chat:
         await context_bot_typing(update)
 
-    # Run AI reasoning
-    analysis = ai.analyze_text_query(query_text)
+    # Run AI reasoning in thread pool
+    analysis = await asyncio.to_thread(ai.analyze_text_query, query_text)
 
     # Log to SQLite
     query_id = database.log_query(
@@ -380,8 +381,8 @@ async def photo_message_handler(update: Update, context: ContextTypes.DEFAULT_TY
         local_path = UPLOADS_DIR / filename
         await file.download_to_drive(str(local_path))
 
-        # Run Multimodal AI Vision
-        analysis = ai.analyze_image_query(str(local_path), caption=caption)
+        # Run Multimodal AI Vision in thread pool
+        analysis = await asyncio.to_thread(ai.analyze_image_query, str(local_path), caption=caption)
 
         # Log in SQLite
         query_id = database.log_query(
@@ -415,7 +416,10 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
     if not query:
         return
         
-    await query.answer()
+    try:
+        await query.answer()
+    except Exception as e:
+        logger.debug(f"Could not answer callback query (expired or acknowledged): {e}")
 
     data = query.data or ""
     user = update.effective_user
@@ -450,7 +454,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
                 "recommended_foss_tools": [],
                 "foss_tip": "Keep learning and contributing to open source software!"
             }
-            pdf_path = generate_pdf_report(
+            pdf_path = await asyncio.to_thread(
+                generate_pdf_report,
                 analysis=analysis,
                 query_text=selected.get("query_text", ""),
                 student_name=user.first_name if user else "FOSS Student"
@@ -477,6 +482,10 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         await stats_command(update, context)
     elif data == "menu_community":
         await community_command(update, context)
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Global error handler: logs errors safely without crashing."""
+    logger.error("Exception while handling an update:", exc_info=context.error)
 
 def build_bot_application() -> Application:
     """Builds and registers handlers for the Telegram application."""
@@ -505,6 +514,9 @@ def build_bot_application() -> Application:
     # Callbacks
     app.add_handler(CallbackQueryHandler(callback_query_handler))
 
+    # Error Handler
+    app.add_error_handler(error_handler)
+
     return app
 
 def main():
@@ -518,7 +530,7 @@ def main():
 
     logger.info("Starting FOSS MBCCET Telegram Bot Daemon...")
     app = build_bot_application()
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()

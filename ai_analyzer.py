@@ -50,15 +50,12 @@ class AIAnalyzer:
         # Vision Models Pool (Ordered by priority)
         self.vision_models: List[Tuple[str, str]] = [
             (NVIDIA_VISION_MODEL, NVIDIA_VISION_KEY),
-            (NVIDIA_KIMI_MODEL, NVIDIA_KIMI_KEY)
         ]
 
-        # Text Reasoning Models Pool (Ordered by priority)
+        # Text Reasoning Models Pool (Ordered by priority & speed)
         self.text_models: List[Tuple[str, str]] = [
-            (NVIDIA_MUSE_MODEL, NVIDIA_MUSE_KEY),
             (NVIDIA_NEMOTRON_MODEL, NVIDIA_NEMOTRON_KEY),
-            (NVIDIA_LAGUNA_MODEL, NVIDIA_LAGUNA_KEY),
-            (NVIDIA_KIMI_MODEL, NVIDIA_KIMI_KEY)
+            (NVIDIA_MUSE_MODEL, NVIDIA_MUSE_KEY)
         ]
 
     def _clean_json_response(self, text: str) -> Dict[str, Any]:
@@ -101,9 +98,9 @@ class AIAnalyzer:
         model: str,
         api_key: str,
         messages: List[Dict[str, Any]],
-        max_tokens: int = 2500,
+        max_tokens: int = 1200,
         temperature: float = 0.2,
-        timeout: float = 25.0
+        timeout: float = 7.0
     ) -> str:
         """Calls a specific model on NVIDIA NIM with streaming/polling support."""
         if not api_key:
@@ -354,7 +351,7 @@ class AIAnalyzer:
                     model=model_name,
                     api_key=api_key,
                     messages=messages,
-                    timeout=20.0
+                    timeout=7.0
                 )
                 if raw_text:
                     parsed = self._clean_json_response(raw_text)
@@ -378,7 +375,7 @@ class AIAnalyzer:
     def analyze_image_query(self, image_path: str, caption: str = "") -> Dict[str, Any]:
         """
         Visual OCR & diagnostic pipeline for terminal/compiler screenshots:
-        DiffusionGemma 26b -> Moonshot Kimi-k3 -> Gemini Vision -> Offline Heuristic.
+        DiffusionGemma 26b -> Gemini Vision -> Offline Heuristic.
         """
         if not os.path.exists(image_path):
             return self._offline_fallback_analyzer("Code screenshot diagnostic", is_image=True, caption=caption)
@@ -407,7 +404,7 @@ class AIAnalyzer:
                 }
             ]
 
-            # 1. Try NVIDIA NIM Vision Models (DiffusionGemma 26b & Kimi-k3)
+            # 1. Try NVIDIA NIM Vision Models
             for model_name, api_key in self.vision_models:
                 if not api_key:
                     continue
@@ -416,7 +413,7 @@ class AIAnalyzer:
                         model=model_name,
                         api_key=api_key,
                         messages=messages,
-                        timeout=30.0
+                        timeout=8.0
                     )
                     if raw_text:
                         return self._clean_json_response(raw_text)
