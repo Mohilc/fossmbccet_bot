@@ -21,15 +21,53 @@ from config import (
     TELEGRAM_BOT_TOKEN
 )
 
+import sys
+import time
+import subprocess
+import threading
+
 # Initialize Database & AI Engine
 database.init_db()
 ai = AIAnalyzer()
+
+_bot_proc: Optional[subprocess.Popen] = None
+
+def _telegram_bot_supervisor():
+    """Background supervisor that ensures telegram_bot.py is always running."""
+    global _bot_proc
+    while True:
+        try:
+            print("🚀 [FastAPI] Launching Telegram Bot daemon subprocess...")
+            _bot_proc = subprocess.Popen([sys.executable, "telegram_bot.py"])
+            _bot_proc.wait()
+            print("⚠️ [FastAPI] Telegram Bot daemon exited. Auto-restarting in 2s...")
+            time.sleep(2)
+        except Exception as e:
+            print(f"❌ [FastAPI] Error starting Telegram Bot: {e}")
+            time.sleep(5)
 
 app = FastAPI(
     title=f"{COMMUNITY_NAME} - Knowledge & Evaluator API",
     description="Lightweight micro-service & live evaluator portal for FOSS MBCCET Telegram bot",
     version="1.0.0"
 )
+
+@app.on_event("startup")
+def on_startup():
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_TOKEN != "DUMMY_TOKEN":
+        # Launch telegram bot daemon in a dedicated background supervisor thread
+        t = threading.Thread(target=_telegram_bot_supervisor, daemon=True, name="TelegramBotSupervisor")
+        t.start()
+        print("✅ [FastAPI] Telegram Bot supervisor background thread started!")
+
+@app.on_event("shutdown")
+def on_shutdown():
+    global _bot_proc
+    if _bot_proc and _bot_proc.poll() is None:
+        try:
+            _bot_proc.terminate()
+        except Exception:
+            pass
 
 # Enable CORS for flexibility
 app.add_middleware(
