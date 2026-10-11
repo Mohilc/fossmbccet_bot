@@ -97,35 +97,30 @@ class AIAnalyzer:
 
     @staticmethod
     def get_greeting_analysis() -> Dict[str, Any]:
-        """Returns standard FOSS MBCCET onboarding mentor response."""
+        """Returns clean, welcoming FOSS MBCCET onboarding response."""
         return {
-            "category": "General FOSS & Community",
-            "subcategory": "Initial Greeting / Onboarding",
+            "category": "FOSS Community",
+            "subcategory": "Welcome",
             "difficulty": "Beginner",
-            "tags": ["foss", "community", "welcome", "onboarding", "beginner"],
-            "summary": "Student sent a greeting with no specific question and needs onboarding guidance.",
+            "tags": ["foss", "community", "welcome"],
+            "summary": "FOSS MBCCET Welcome",
             "direct_answer": (
-                "Hey there! Welcome to FOSS MBCCET. A simple hi is a great start. "
-                "To help you best, tell me what you are working on or curious about: "
-                "Git & version control, Linux & shell, programming bugs, open source licensing, "
-                "FOSS alternatives to proprietary tools, or open source programs like GSoC, Hacktoberfest and Outreachy.\n\n"
-                "Share your OS, the error message or code you are stuck on, and what you have tried so far. "
-                "I will break it down step by step with runnable commands and FOSS best practices."
+                "👋 <b>Welcome to FOSS MBCCET!</b>\n\n"
+                "I'm Tuxie, your open-source mentor. Ask me anything about:\n"
+                "• 🌿 <b>Git & GitHub:</b> Branches, commits, merge conflicts\n"
+                "• 🐧 <b>Linux & CLI:</b> Terminal commands, chmod, bash\n"
+                "• 🐛 <b>Debugging:</b> Errors, stack traces, compiler issues\n"
+                "• 🌟 <b>Open Source:</b> GSoC, Hacktoberfest, licensing\n\n"
+                "Type your question or send a screenshot to get started!"
             ),
             "terminal_commands_or_code": (
-                "# Quick FOSS MBCCET starter check\n"
+                "# Quick starter commands\n"
+                "git --version\n"
                 "whoami\n"
-                "uname -a\n"
-                "git --version\n\n"
-                "# Create a hello world repo locally\n"
-                "mkdir foss-hello && cd foss-hello\n"
-                "git init\n"
-                'echo "# FOSS MBCCET" > README.md\n'
-                "git add README.md\n"
-                'git commit -m "initial commit"'
+                "uname -a"
             ),
-            "recommended_foss_tools": ["Git", "Bash", "Linux", "GitHub"],
-            "foss_tip": "Every great open source contributor started with a simple 'hello world'!"
+            "recommended_foss_tools": ["Git", "Linux", "Bash"],
+            "foss_tip": "Ask any doubt directly, or type /help for commands!"
         }
 
     def _clean_json_response(self, text: str) -> Dict[str, Any]:
@@ -264,148 +259,158 @@ class AIAnalyzer:
             return part.get("text", "")
 
     def _offline_fallback_analyzer(self, query: str, is_image: bool = False, caption: str = "") -> Dict[str, Any]:
-        """Offline Pedagogical Heuristic Engine for FOSS MBCCET."""
+        """Offline Pedagogical Heuristic Engine for FOSS MBCCET - Simple, precise structure."""
         if not is_image and self.is_greeting(query):
             return self.get_greeting_analysis()
 
         q = (query + " " + caption).lower()
+        is_detail = any(w in q for w in ["more detail", "more info", "in detail", "explain more", "detailed", "step by step", "deep dive", "elaborate"])
 
         if any(w in q for w in ["git", "branch", "merge", "rebase", "commit", "push", "pull", "stash", "checkout", "conflict", "head", "origin"]):
             category = "Git & Version Control"
-            subcategory = "Branching & Collaboration"
+            subcategory = "Branching & Workflow"
             difficulty = "Beginner" if any(w in q for w in ["clone", "init", "add", "commit", "push"]) else "Intermediate"
-            tags = ["git", "version-control", "github", "vcs"]
-            summary = "Git workflow, version control, or conflict resolution inquiry"
-            direct_answer = (
-                "Git is the distributed version control system created by Linus Torvalds in 2005. "
-                "For handling branches and collaboration:\n"
-                "1. Always keep your local `main` branch synced with `git pull --rebase origin main`.\n"
-                "2. Create dedicated feature branches (`feature/your-topic`) before editing code.\n"
-                "3. In case of merge conflicts, open the files, locate conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`), choose the resolution, stage with `git add`, and continue the rebase/merge.\n"
-                "4. Write clear commit messages following Conventional Commits format (`feat:`, `fix:`, `docs:`)."
-            )
-            code = "git checkout -b feature/awesome-feature\ngit add -A\ngit commit -m 'feat: add open source module'\ngit push -u origin feature/awesome-feature"
-            tools = ["Git", "GitHub CLI (gh)", "LazyGit", "GitKraken / Ungit"]
-            tip = "Use `git status` frequently and `git log --oneline --graph --decorate` to visualize branch topologies!"
+            tags = ["git", "vcs", "github"]
+            summary = "Git workflow inquiry"
+            if is_detail:
+                direct_answer = (
+                    "Git is a distributed version control system for tracking changes.\n"
+                    "• <b>Syncing:</b> Always run <code>git pull --rebase origin main</code> before branching to avoid divergent histories.\n"
+                    "• <b>Branching:</b> Keep isolated feature branches for each task (<code>feature/task-name</code>).\n"
+                    "• <b>Conflicts:</b> Look for conflict markers (<code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>, <code>=======</code>, <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code>), choose the correct code, stage with <code>git add</code>, and commit.\n"
+                    "• <b>Commits:</b> Use conventional commit prefixes like <code>feat:</code>, <code>fix:</code>, <code>docs:</code>."
+                )
+            else:
+                direct_answer = (
+                    "To work with Git cleanly:\n"
+                    "1. <b>Branch:</b> <code>git checkout -b feature/name</code>\n"
+                    "2. <b>Commit:</b> <code>git add -A && git commit -m 'feat: description'</code>\n"
+                    "3. <b>Sync:</b> <code>git pull --rebase origin main</code> before pushing.\n"
+                    "For merge conflicts: open conflicting files, pick your resolution, stage with <code>git add</code>, and commit."
+                )
+            code = "git checkout -b feature/my-feature\ngit add -A\ngit commit -m 'feat: add feature'\ngit push -u origin feature/my-feature"
+            tools = ["Git", "GitHub CLI", "LazyGit"]
+            tip = "Run `git status` frequently to verify what is staged before committing!"
 
         elif any(w in q for w in ["linux", "ubuntu", "debian", "arch", "bash", "chmod", "chown", "sudo", "terminal", "shell", "kernel", "systemd", "pacman", "apt"]):
-            category = "Linux & Shell Scripting"
-            subcategory = "System Administration & CLI"
+            category = "Linux & Shell"
+            subcategory = "CLI & Permissions"
             difficulty = "Intermediate" if "systemd" in q or "kernel" in q else "Beginner"
-            tags = ["linux", "bash", "sysadmin", "cli", "posix"]
-            summary = "Linux terminal navigation, file permissions, or package management doubt"
-            direct_answer = (
-                "GNU/Linux provides robust multi-user permission models and modular command-line utilities:\n"
-                "1. **Permissions**: Format is `rwxrwxrwx` (User, Group, Others). `chmod 755 script.sh` gives owner write permissions and all others read+execute.\n"
-                "2. **Pipes & Streams**: Combine UNIX tools with pipes (`|`), standard output redirection (`>`), and append (`>>`).\n"
-                "3. **Services**: Manage system daemons cleanly with `systemctl start|stop|status <service>`."
-            )
-            code = "# Update packages & check service status\nsudo apt update && sudo apt upgrade -y\nsudo systemctl status ssh\n# Find text inside files recursively\ngrep -rnw './' -e 'FOSS'"
-            tools = ["GNU Coreutils", "bash / zsh / fish", "btop", "ripgrep", "tmux"]
-            tip = "Remember the UNIX philosophy: Write programs that do one thing and do it well, and work together through plain text streams."
+            tags = ["linux", "bash", "cli"]
+            summary = "Linux command inquiry"
+            if is_detail:
+                direct_answer = (
+                    "Linux permission and service management breakdown:\n"
+                    "• <b>Permissions:</b> Format <code>rwxrwxrwx</code> (User, Group, Others). <code>chmod 755 file</code> grants owner write, all others read+execute.\n"
+                    "• <b>Redirection & Pipes:</b> Use <code>|</code> to pipe output to input, <code>&gt;</code> to overwrite, and <code>&gt;&gt;</code> to append.\n"
+                    "• <b>Services:</b> Manage daemons with <code>systemctl start|stop|status &lt;service&gt;</code>."
+                )
+            else:
+                direct_answer = (
+                    "Essential Linux commands & permissions:\n"
+                    "• <b>Permissions:</b> <code>chmod 755 script.sh</code> (makes executable)\n"
+                    "• <b>Search files:</b> <code>grep -rnw './' -e 'keyword'</code>\n"
+                    "• <b>Services:</b> <code>sudo systemctl status service_name</code>"
+                )
+            code = "sudo apt update && sudo apt upgrade -y\nchmod +x script.sh\n./script.sh"
+            tools = ["GNU Coreutils", "Bash", "btop", "ripgrep"]
+            tip = "Use `Ctrl + R` in terminal to search through your command history instantly!"
 
         elif any(w in q for w in ["license", "gpl", "mit", "apache", "bsd", "copyleft", "agpl", "proprietary", "copyright"]):
-            category = "Open Source Licensing & Ethics"
-            subcategory = "License Selection & Copyleft"
+            category = "Open Source Licensing"
+            subcategory = "License Choice"
             difficulty = "Beginner"
-            tags = ["licenses", "copyleft", "open-source", "ethics", "gpl"]
-            summary = "FOSS licensing distinction and ethical software distribution"
+            tags = ["licenses", "copyleft", "gpl", "mit"]
+            summary = "FOSS licensing distinction"
             direct_answer = (
-                "Open Source licenses define how others can use, modify, and distribute your code:\n"
-                "1. **Permissive Licenses** (MIT, Apache 2.0, BSD): Grants users maximum freedom to reuse code in any project, including proprietary software, with minimal attribution requirements.\n"
-                "2. **Strong Copyleft** (GNU GPLv3, AGPLv3): Ensures the software and any modified derivative works remain free and open source forever. If someone distributes modifications, they MUST release their source under the GPL.\n"
-                "3. **Patent Grants**: Apache 2.0 explicitly grants patent rights, which is great for commercial open source libraries."
+                "Open source license quick guide:\n"
+                "• <b>MIT / Apache 2.0:</b> Permissive (anyone can use and modify, even in proprietary code).\n"
+                "• <b>GNU GPLv3:</b> Strong Copyleft (derivative works MUST also remain open source under GPL).\n"
+                "• <b>AGPLv3:</b> Copyleft triggered over network/web services."
             )
-            code = "# Check existing licenses in your project\nnpx license-checker --summary"
-            tools = ["ChooseALicense.com", "REUSE Software Tool", "FOSSA", "SPDX License List"]
-            tip = "If you want anyone to use your library without friction, choose MIT or Apache 2.0. If you want to protect software freedom and prevent closed-source forks, choose GNU GPLv3!"
+            code = "# Check licenses in project\nnpx license-checker --summary"
+            tools = ["ChooseALicense.com", "REUSE Tool", "SPDX"]
+            tip = "Use MIT for maximum adoption; use GPLv3 to keep software free forever!"
 
         elif any(w in q for w in ["gsoc", "hacktoberfest", "outreachy", "first pr", "good first issue", "contribute", "open source program"]):
-            category = "Open Source Programs & GSoC"
-            subcategory = "Student Contribution Pathways"
+            category = "Open Source Programs"
+            subcategory = "GSoC & Mentorship"
             difficulty = "Intermediate"
-            tags = ["gsoc", "hacktoberfest", "mentorship", "contributions", "students"]
-            summary = "Guidance on participating in open source mentorship programs"
+            tags = ["gsoc", "hacktoberfest", "contributions"]
+            summary = "Open source program guidance"
             direct_answer = (
-                "Getting started with major open source programs like GSoC, Hacktoberfest, and Outreachy:\n"
-                "1. **Find Projects Early**: Explore past participating organizations on the GSoC archives (e.g., Linux Foundation, Python Software Foundation, VideoLAN, KDE, Apache).\n"
-                "2. **Good First Issues**: Search GitHub with `is:issue is:open label:\"good first issue\"` or `label:\"help wanted\"`.\n"
-                "3. **Engage with Community**: Join their Zulip, Matrix, Discord, or IRC channel. Introduce yourself politely and start by testing documentation or reproducing bugs.\n"
-                "4. **Write Quality PRs**: Link the issue (`Fixes #123`), explain your solution, and verify unit tests pass before asking for review."
+                "Getting started with GSoC / Hacktoberfest / Outreachy:\n"
+                "1. Pick an organization early from past GSoC archives (e.g. Linux, Python, KDE).\n"
+                "2. Search GitHub for issues labeled <code>good first issue</code>.\n"
+                "3. Introduce yourself politely in community channels and send small, quality PRs."
             )
-            code = "# Clone the target repo and create your fork branch\ngit clone https://github.com/fossmbccet/project.git\ncd project\ngit remote add upstream https://github.com/original-org/project.git"
-            tools = ["GoodFirstIssue.dev", "Up-For-Grabs.net", "GitHub Discussions", "Matrix / IRC"]
-            tip = "Open source maintainers value consistency and clear communication over huge, unrequested PRs. Start small and build trust!"
+            code = "git clone <repo-url>\ncd <repo>\ngit remote add upstream <original-url>"
+            tools = ["GoodFirstIssue.dev", "Up-For-Grabs.net", "GitHub Discussions"]
+            tip = "Small, well-tested PRs build trust much faster than large unrequested rewrites!"
 
         elif any(w in q for w in ["docker", "container", "devops", "self-host", "kubernetes", "compose"]):
-            category = "DevOps, Docker & Self-Hosting"
-            subcategory = "Containerization & Deployment"
+            category = "DevOps & Docker"
+            subcategory = "Containers"
             difficulty = "Intermediate"
-            tags = ["docker", "containers", "self-hosting", "devops"]
-            summary = "Docker containerization and reproducible FOSS deployment"
+            tags = ["docker", "containers", "devops"]
+            summary = "Docker containerization"
             direct_answer = (
-                "Docker packages applications into standardized units with all dependencies:\n"
-                "1. Write a minimal multi-stage `Dockerfile` to keep production image sizes tiny.\n"
-                "2. Use `docker-compose.yml` for multi-container stacks (e.g., app + database).\n"
-                "3. Isolate persistent state with Docker named volumes."
+                "Docker container essentials:\n"
+                "• <b>Build image:</b> <code>docker build -t app-name .</code>\n"
+                "• <b>Run container:</b> <code>docker run -d -p 8000:8000 app-name</code>\n"
+                "• <b>View logs:</b> <code>docker logs -f container_id</code>"
             )
-            code = "docker build -t fossmbccet-bot .\ndocker run -d -p 8000:8000 --name fossbot fossmbccet-bot\ndocker logs -f fossbot"
-            tools = ["Docker", "Podman (Rootless FOSS alternative)", "Docker Compose", "Portainer"]
-            tip = "Check out Podman as a daemonless, rootless drop-in FOSS alternative to Docker (`alias docker=podman`)!"
+            code = "docker build -t foss-app .\ndocker run -d -p 8000:8000 --name myapp foss-app\ndocker ps"
+            tools = ["Docker", "Podman", "Docker Compose"]
+            tip = "Try Podman (`alias docker=podman`) as a rootless daemonless open-source alternative!"
 
         elif any(w in q for w in ["error", "bug", "exception", "failed", "segfault", "segmentation fault", "core dumped", "crash", "undefined", "syntaxerror", "traceback", "leak", "valgrind", "compiler"]):
-            category = "Programming & Bug Debugging"
-            subcategory = "Error Diagnosis & Debugging"
+            category = "Programming & Debugging"
+            subcategory = "Error Diagnostics"
             difficulty = "Intermediate"
-            tags = ["debugging", "troubleshooting", "compiler-error", "bug-fix"]
-            summary = "Code debugging, stack trace analysis, and resolution"
+            tags = ["debugging", "troubleshooting", "bug-fix"]
+            summary = "Code debugging inquiry"
             direct_answer = (
-                "Debugging systematically saves hours of guesswork:\n"
-                "1. **Read the traceback from bottom to top**: The bottom line indicates the exact exception and file/line number.\n"
-                "2. **Inspect variable state**: Use interactive debuggers (`pdb` in Python, `gdb` in C/C++, `debugger` in JS) rather than random print statements.\n"
-                "3. **Reproduce with minimal test case**: Strip extraneous code until only the failing logic remains."
+                "How to debug code errors quickly:\n"
+                "1. Read the traceback from <b>bottom to top</b> to find the exact line and error type.\n"
+                "2. Inspect variables using interactive debuggers (<code>pdb</code> for Python, <code>gdb</code> for C/C++).\n"
+                "3. Isolate the failure into a minimal reproducible test case."
             )
-            code = "# Run interactive python debugger on unhandled exception\npython -m pdb your_script.py"
-            tools = ["GDB", "Valgrind", "PDB", "Sentry (Self-hosted)", "Ghidra"]
-            tip = "Rubber duck debugging actually works! Explaining the problem line-by-line forces your brain to re-examine hidden assumptions."
+            code = "# Run interactive python debugger\npython -m pdb your_script.py"
+            tools = ["GDB", "Valgrind", "PDB", "ripgrep"]
+            tip = "Rubber-duck debugging: explain the code out loud line-by-line to find logic flaws!"
 
         elif any(w in q for w in ["alternative", "photoshop", "office", "windows", "replace", "vs code", "notion"]):
-            category = "FOSS Alternatives & Tools"
-            subcategory = "Open Source Replacements"
+            category = "FOSS Alternatives"
+            subcategory = "Open Source Tools"
             difficulty = "Beginner"
-            tags = ["foss-alternatives", "free-software", "productivity", "privacy"]
-            summary = "FOSS alternatives to proprietary commercial software"
+            tags = ["foss-alternatives", "productivity"]
+            summary = "FOSS software alternatives"
             direct_answer = (
-                "High quality FOSS alternatives to popular proprietary tools:\n"
-                "• **Photoshop / Illustrator** -> GIMP / Inkscape / Krita\n"
-                "• **Microsoft Office** -> LibreOffice / OnlyOffice\n"
-                "• **Notion / Evernote** -> Obsidian / Joplin / Logseq\n"
-                "• **Premiere Pro** -> Kdenlive / DaVinci Resolve / Shotcut\n"
-                "• **Postman** -> Bruno / Hoppscotch / Insomnia\n"
-                "• **VS Code Builds** -> VSCodium (100% open telemetry-free)"
+                "Top FOSS alternatives to proprietary tools:\n"
+                "• Photoshop -> <b>GIMP / Krita</b>\n"
+                "• MS Office -> <b>LibreOffice / OnlyOffice</b>\n"
+                "• Notion -> <b>Obsidian / Joplin</b>\n"
+                "• VS Code -> <b>VSCodium</b> (telemetry-free)"
             )
-            code = "# Install open-source alternatives via package manager\nsudo apt install gimp inkscape libreoffice vscodium"
-            tools = ["LibreOffice", "GIMP", "Inkscape", "Kdenlive", "VSCodium", "Hoppscotch"]
-            tip = "Check out AlternativeTo.net with the 'Open Source' filter checked whenever you need a tool!"
+            code = "sudo apt install gimp libreoffice vscodium"
+            tools = ["LibreOffice", "GIMP", "Inkscape", "VSCodium"]
+            tip = "Filter by 'Open Source' on AlternativeTo.net to find community alternatives!"
 
         else:
-            category = "General FOSS & Community"
-            subcategory = "FOSS Philosophy & Best Practices"
+            category = "FOSS Community"
+            subcategory = "Q&A"
             difficulty = "Beginner"
-            tags = ["foss", "community", "freedom", "open-source"]
-            summary = f"FOSS community query: {query[:60]}"
+            tags = ["foss", "community", "open-source"]
+            summary = f"Query: {query[:50]}"
             direct_answer = (
-                f"Welcome to FOSS MBCCET! Regarding your query on '{query}':\n\n"
-                "Free and Open Source Software (FOSS) stands on the four essential software freedoms defined by the Free Software Foundation:\n"
-                "• Freedom 0: Run the program for any purpose.\n"
-                "• Freedom 1: Study how the program works and modify it.\n"
-                "• Freedom 2: Redistribute copies to help your neighbor.\n"
-                "• Freedom 3: Distribute modified copies to benefit the community.\n\n"
-                "Feel free to ask specific technical questions about Linux commands, Git workflows, compiler errors, or open-source licenses!"
+                f"Regarding your query on '{query}':\n\n"
+                "FOSS MBCCET is here to help! Ask specific questions about Linux commands, "
+                "Git workflows, compiler errors, or open-source licenses for an instant step-by-step fix."
             )
-            code = "# Join the FOSS MBCCET community\ngit clone https://github.com/fossmbccet/welcome.git"
-            tools = ["GitHub", "GitLab", "Linux Foundation", "FSF"]
-            tip = "The best way to learn software engineering is by reading real, high-quality open source code on GitHub/GitLab!"
+            code = "# Quick starter check\ngit --version\nwhoami"
+            tools = ["Git", "Linux", "GitHub"]
+            tip = "Include your OS and error message for the most precise solution!"
 
         return {
             "category": category,

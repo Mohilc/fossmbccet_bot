@@ -7,47 +7,28 @@ from config import UPLOADS_DIR
 
 def format_telegram_response(analysis: Dict[str, Any], query_id: Optional[int] = None) -> str:
     """
-    Formats the AI analysis into clean, descriptive HTML for Telegram.
-    Simple, clear format for an open source community helper bot.
+    Formats the AI analysis into clean, precise, and readable HTML for Telegram.
+    Simple, elegant structure: direct answer + commands + pro-tip.
     """
-    category = html.escape(str(analysis.get("category", "General FOSS")), quote=False)
-    subcategory = html.escape(str(analysis.get("subcategory", "General")), quote=False)
-    difficulty = html.escape(str(analysis.get("difficulty", "Beginner")), quote=False)
-    summary = html.escape(str(analysis.get("summary", "")), quote=False)
-    direct_answer = html.escape(str(analysis.get("direct_answer", "")), quote=False)
-    code = str(analysis.get("terminal_commands_or_code", ""))
-    tools = [html.escape(str(t), quote=False) for t in analysis.get("recommended_foss_tools", [])]
-    tip = html.escape(str(analysis.get("foss_tip", "")), quote=False)
-    tags = [f"#{html.escape(str(t).replace(' ', ''), quote=False)}" for t in analysis.get("tags", [])]
+    category = html.escape(str(analysis.get("category", "FOSS Mentor")), quote=False)
+    subcategory = html.escape(str(analysis.get("subcategory", "")), quote=False)
+    direct_answer = str(analysis.get("direct_answer", "")).strip()
+    code = str(analysis.get("terminal_commands_or_code", "")).strip()
+    tip = html.escape(str(analysis.get("foss_tip", "")), quote=False).strip()
 
-    # Difficulty indicator
-    diff_icon = "🟢" if difficulty == "Beginner" else ("🟡" if difficulty == "Intermediate" else "🔴")
+    cat_badge = f"{category} • {subcategory}" if subcategory and subcategory not in ["General", "Welcome", ""] else category
 
-    parts = []
-    parts.append(f"🐧 <b>FOSS MBCCET Mentor</b>")
-    parts.append(f"📂 <b>Category:</b> {category} ({subcategory})")
-    parts.append(f"{diff_icon} <b>Level:</b> {difficulty}")
+    parts = [f"🐧 <b>FOSS MBCCET</b> | <i>{cat_badge}</i>\n"]
 
-    if summary:
-        parts.append(f"\n📌 <b>Summary:</b> {summary}")
+    if direct_answer:
+        parts.append(direct_answer)
 
-    parts.append(f"\n💡 <b>Explanation:</b>\n{direct_answer}")
-
-    if code and code.strip():
+    if code:
         escaped_code = html.escape(code, quote=False)
-        parts.append(f"\n💻 <b>Terminal Commands / Solution:</b>\n<pre><code>{escaped_code}</code></pre>")
-
-    if tools:
-        parts.append(f"\n🛠️ <b>FOSS Tools:</b> {', '.join(tools)}")
+        parts.append(f"\n💻 <b>Commands:</b>\n<pre><code>{escaped_code}</code></pre>")
 
     if tip:
-        parts.append(f"🐧 <b>Did you know?</b> 🐧 <i>FOSS Pro-Tip:</i> {tip}")
-
-    if tags:
-        parts.append(f"\n🏷️ {' '.join(tags)}")
-
-    if query_id:
-        parts.append(f"\nRef ID: #{query_id}")
+        parts.append(f"\n💡 <i>Tip: {tip}</i>")
 
     return "\n".join(parts)
 
