@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FOSS MBCCET • AI Knowledge & Doubt Solver Portal</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Background Glows -->
+    <div class="glow-bg glow-1"></div>
+    <div class="glow-bg glow-2"></div>
+
+    <div class="app-container">
+        <!-- Navigation / Header -->
+        <header class="header">
+            <div class="logo-area">
+                <div class="logo-icon">🐧</div>
+                <div class="logo-text">
+                    <div class="brand-title">FOSS MBCCET</div>
+                    <div class="brand-sub">Free & Open Source Software Cell • MBCCET</div>
+                </div>
+            </div>
+
+            <div class="status-badge-container">
+                <div class="status-indicator">
+                    <span class="pulse-dot"></span>
+                    <span id="daemon-status">Bot Daemon Online</span>
+                </div>
+                <div class="badge-tag">FastAPI Ultra-Lean</div>
+            </div>
+
+            <div class="header-actions">
+                <a href="https://github.com/fossmbccet" target="_blank" rel="noopener" class="btn-ghost" id="github-link">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+                    GitHub
+                </a>
+                <a href="https://t.me/fossmbccet" target="_blank" rel="noopener" class="btn-primary" id="telegram-link">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    Telegram Bot
+                </a>
+            </div>
+        </header>
+
+        <!-- Metrics Banner -->
+        <section class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Active Learners</div>
+                <div class="metric-value" id="stat-students">--</div>
+                <div class="metric-footer">Across MBCCET Depts</div>
+            </div>
+            <div class="metric-card highlight">
+                <div class="metric-label">Doubts Resolved</div>
+                <div class="metric-value" id="stat-doubts">--</div>
+                <div class="metric-footer">24/7 AI Reasoning</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Terminal / Code Diagnosed</div>
+                <div class="metric-value" id="stat-photos">--</div>
+                <div class="metric-footer">Multimodal Vision</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Primary Topic</div>
+                <div class="metric-value text-accent" id="stat-top-topic">Git & Linux</div>
+                <div class="metric-footer">FOSS Core Curriculum</div>
+            </div>
+        </section>
+
+        <!-- Main Workspace -->
+        <main class="main-content">
+            <!-- Left Column: Interactive Doubt & Classifier Console -->
+            <section class="console-section card">
+                <div class="card-header">
+                    <div>
+                        <h2>⚡ AI Doubt Resolver & Classifier</h2>
+                        <p class="section-desc">Test Tuxie's reasoning directly or classify any open-source inquiry</p>
+                    </div>
+                    <div class="mode-toggle">
+                        <button class="toggle-btn active" id="btn-mode-ask">Doubt Solver</button>
+                        <button class="toggle-btn" id="btn-mode-classify">Classification Only</button>
+                    </div>
+                </div>
+
+                <!-- Preset Chips -->
+                <div class="chips-container">
+                    <span class="chip-label">Quick Prompts:</span>
+                    <button class="chip" data-query="How do I fix a Git merge conflict in VS Code?">Git Merge Conflict</button>
+                    <button class="chip" data-query="What is the difference between chmod 755 and chmod 644 in Linux?">Linux Permissions</button>
+                    <button class="chip" data-query="Should I use GNU GPLv3 or MIT license for my student project?">GPLv3 vs MIT</button>
+                    <button class="chip" data-query="How can a college beginner get selected for Google Summer of Code (GSoC)?">GSoC Roadmap</button>
+                    <button class="chip" data-query="What are the best free and open-source alternatives to Adobe Photoshop?">FOSS Alternatives</button>
+                </div>
+
+                <!-- Input Box -->
+                <div class="input-container">
+                    <textarea id="query-input" placeholder="Type your coding doubt, Linux error, Git issue, or open-source licensing question..." rows="4"></textarea>
+                    <div class="input-actions">
+                        <span class="keyboard-hint">Press <strong>Ctrl + Enter</strong> to submit</span>
+                        <button id="btn-submit" class="btn-accent">
+                            <span id="submit-spinner" class="spinner hidden"></span>
+                            <span id="submit-text">Resolve Doubt</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Results Output Card -->
+                <div id="result-box" class="result-box hidden">
+                    <div class="result-header">
+                        <div class="taxonomy-badges">
+                            <span class="badge category-badge" id="res-category">Git & Version Control</span>
+                            <span class="badge subcategory-badge" id="res-subcategory">Branching</span>
+                            <span class="badge diff-badge" id="res-difficulty">Beginner</span>
+                        </div>
+                        <button id="btn-copy-code" class="btn-small">Copy Code</button>
+                    </div>
+
+                    <div class="result-body">
+                        <div class="result-summary" id="res-summary"></div>
+                        <div class="result-explanation" id="res-explanation"></div>
+                        
+                        <div class="code-terminal-block">
+                            <div class="terminal-bar">
+                                <span class="t-dot red"></span>
+                                <span class="t-dot yellow"></span>
+                                <span class="t-dot green"></span>
+                                <span class="terminal-title">bash / solution</span>
+                            </div>
+                            <pre><code id="res-code"></code></pre>
+                        </div>
+
+                        <div class="result-footer-meta">
+                            <div class="meta-item">
+                                <strong>🛠️ FOSS Tools:</strong> <span id="res-tools"></span>
+                            </div>
+                            <div class="meta-item tip-box">
+                                <strong>🐧 Hacker Pro-Tip:</strong> <span id="res-tip"></span>
+                            </div>
+                            <div class="tags-row" id="res-tags"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Column: Pulse & Reference Library -->
+            <section class="side-section">
+                <!-- Topics Breakdown -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>📊 Community Topic Pulse</h3>
+                    </div>
+                    <div class="category-bars" id="category-bars-container">
+                        <!-- Populated by JS -->
+                        <div class="loading-placeholder">Loading live telemetry...</div>
+                    </div>
+                </div>
+
+                <!-- Curated Knowledge Quickref -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>📚 Instant FOSS Cheatsheets</h3>
+                    </div>
+                    <div class="quickref-tabs">
+                        <button class="tab-btn active" data-topic="git">Git</button>
+                        <button class="tab-btn" data-topic="linux">Linux</button>
+                        <button class="tab-btn" data-topic="licenses">Licenses</button>
+                        <button class="tab-btn" data-topic="programs">GSoC</button>
+                    </div>
+                    <div class="quickref-content">
+                        <pre><code id="quickref-code">Loading cheat sheet...</code></pre>
+                    </div>
+                </div>
+
+                <!-- Live Queries Stream -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>🕒 Recent Resolved Doubts</h3>
+                    </div>
+                    <div class="stream-list" id="recent-queries-container">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div>
+                Built with ❤️ for <strong>FOSS MBCCET</strong> • Mar Baselios Christian College of Engineering & Technology
+            </div>
+            <div class="footer-links">
+                <span>Free Software Foundation Guidelines</span> • 
+                <span>Lightweight Daemon Engine</span> • 
+                <span>Telegram Bot v20 Async</span>
+            </div>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

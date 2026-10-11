@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # Web Evaluator Portal & Health API (FastAPI)
+  web:
+    build: .
+    container_name: fossmbccet-web
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ADMIN_SECRET=${ADMIN_SECRET:-fossmbccet-secret}
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Telegram Bot Daemon (Photo & Text Q&A)
+  bot:
+    build: .
+    container_name: fossmbccet-bot
+    restart: unless-stopped
+    command: ["python", "telegram_bot.py"]
+    depends_on:
+      - web
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - ./data:/app/data
+
+networks:
+  default:
+    name: fossmbccet-net

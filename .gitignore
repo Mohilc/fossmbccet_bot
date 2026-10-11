@@ -1,0 +1,29 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pytest_cache/
+.coverage
+
+# Environment Secrets
+.env
+.env.local
+.env.production
+
+# SQLite Databases & Dynamic Uploads
+data/*.db
+data/uploads/*
+!data/uploads/.gitkeep
+!data/.gitkeep
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
